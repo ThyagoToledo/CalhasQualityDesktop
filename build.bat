@@ -32,22 +32,7 @@ if not exist "dist\CalhaGest\CalhaGest.exe" (
 
 echo [4/5] Build gerado com sucesso em dist\CalhaGest\
 
-REM Verificar se Inno Setup está instalado
-where iscc >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo [5/5] Gerando instalador com Inno Setup...
-    iscc CalhaGest_installer.iss
-    echo Instalador gerado!
-) else (
-    if exist "C:\Program Files (x86)\Inno Setup 6\iscc.exe" (
-        echo [5/5] Gerando instalador com Inno Setup...
-        "C:\Program Files (x86)\Inno Setup 6\iscc.exe" CalhaGest_installer.iss
-        echo Instalador gerado!
-    ) else (
-        echo [5/5] Inno Setup nao encontrado. Instale: https://jrsoftware.org/isinfo.php
-        echo Pule este passo - o executavel esta em dist\CalhaGest\
-    )
-)
+echo [5/5] Build concluido!
 
 echo.
 echo ============================================
