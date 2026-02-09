@@ -40,10 +40,17 @@ def init_database():
             company_address TEXT,
             company_cnpj TEXT,
             company_logo BLOB,
+            dobra_value REAL DEFAULT 5.0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Migração: adicionar coluna dobra_value se não existir
+    try:
+        cursor.execute("ALTER TABLE settings ADD COLUMN dobra_value REAL DEFAULT 5.0")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
     
     # Tabela de Tipos de Produto (dinâmica)
     cursor.execute("""
@@ -77,11 +84,18 @@ def init_database():
             measure REAL NOT NULL,
             price_per_meter REAL NOT NULL,
             cost REAL DEFAULT 0,
+            has_dobra INTEGER DEFAULT 0,
             description TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Migração: adicionar coluna has_dobra se não existir
+    try:
+        cursor.execute("ALTER TABLE products ADD COLUMN has_dobra INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
     
     # Tabela de Materiais vinculados a Produtos (para descontar estoque)
     cursor.execute("""
@@ -244,7 +258,7 @@ def update_product(product_id: int, **kwargs) -> bool:
     fields = []
     values = []
     for key, value in kwargs.items():
-        if key in ['name', 'type', 'measure', 'price_per_meter', 'cost', 'description']:
+        if key in ['name', 'type', 'measure', 'price_per_meter', 'cost', 'has_dobra', 'description']:
             fields.append(f"{key} = ?")
             values.append(value)
     
@@ -405,6 +419,12 @@ def recalculate_quote_totals(quote_id: int):
 
 # ============== CRUD de Itens do Orçamento ==============
 
+def get_dobra_value() -> float:
+    """Retorna o valor da dobra configurado nas settings."""
+    settings = get_settings()
+    return float(settings.get('dobra_value', 5.0) or 5.0)
+
+
 def add_quote_item(quote_id: int, product_id: int, meters: float, 
                    custom_price: float = None) -> int:
     """Adiciona um item ao orçamento."""
@@ -419,6 +439,10 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
         raise ValueError("Produto não encontrado")
     
     price_per_meter = custom_price if custom_price else product['price_per_meter']
+    # Aplicar acréscimo de dobra se ativado no produto
+    if product['has_dobra']:
+        dobra = get_dobra_value()
+        price_per_meter += dobra
     total = meters * price_per_meter
     cost_per_meter = product['cost'] or 0
     cost_total = meters * cost_per_meter
@@ -646,7 +670,8 @@ def update_settings(**kwargs) -> bool:
     cursor = conn.cursor()
     
     allowed_fields = ['company_name', 'company_phone', 'company_email',
-                      'company_address', 'company_cnpj', 'company_logo']
+                      'company_address', 'company_cnpj', 'company_logo',
+                      'dobra_value']
     
     fields = []
     values = []

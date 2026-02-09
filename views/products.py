@@ -180,6 +180,9 @@ class ProductsView(ctk.CTkFrame):
         details = f"Medida: {product['measure']}cm  •  Preço: {format_currency(product['price_per_meter'])}/m"
         if product.get("cost") and product["cost"] > 0:
             details += f"  •  Custo: {format_currency(product['cost'])}/m"
+        if product.get("has_dobra"):
+            dobra_val = db.get_dobra_value()
+            details += f"  •  Dobra: +{format_currency(dobra_val)}/m"
         ctk.CTkLabel(
             left, text=details,
             font=ctk.CTkFont(size=12),
@@ -200,6 +203,20 @@ class ProductsView(ctk.CTkFrame):
         # Botões
         right = ctk.CTkFrame(content, fg_color="transparent")
         right.pack(side="right")
+
+        # Dobra toggle
+        has_dobra = bool(product.get("has_dobra", 0))
+        dobra_text = "Com" if has_dobra else "Sem"
+        dobra_fg = COLORS["success"] if has_dobra else COLORS["error"]
+        dobra_hover = COLORS.get("success_hover", "#16a34a") if has_dobra else COLORS.get("error_hover", "#dc2626")
+
+        ctk.CTkButton(
+            right, text=f"✂ {dobra_text}", font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=dobra_fg, hover_color=dobra_hover,
+            text_color="white",
+            width=70, height=32, corner_radius=8,
+            command=lambda p=product: self._toggle_dobra(p),
+        ).pack(side="left", padx=4)
 
         ctk.CTkButton(
             right, text="📦 Material", font=ctk.CTkFont(size=11),
@@ -224,6 +241,14 @@ class ProductsView(ctk.CTkFrame):
             width=40, height=32, corner_radius=8,
             command=lambda p=product: self._confirm_delete(p),
         ).pack(side="left", padx=4)
+
+    def _toggle_dobra(self, product):
+        """Alterna o estado de dobra do produto."""
+        new_val = 0 if product.get("has_dobra", 0) else 1
+        db.update_product(product["id"], has_dobra=new_val)
+        status = "ativada" if new_val else "desativada"
+        self.app.show_toast(f"Dobra {status} para {product['name']}.", "success")
+        self._load_products()
 
     # ========== Tipos de Produto ==========
 
@@ -529,6 +554,8 @@ class ProductsView(ctk.CTkFrame):
             {"key": "measure", "label": "Medida (cm)", "type": "number", "required": True},
             {"key": "price_per_meter", "label": "Preço por metro (R$)", "type": "number", "required": True},
             {"key": "cost", "label": "Custo por metro (R$)", "type": "number"},
+            {"key": "has_dobra", "label": "Dobra", "type": "option", "options": ["0", "1"],
+             "option_labels": {"0": "Sem Dobra", "1": "Com Dobra"}},
             {"key": "description", "label": "Descrição", "type": "text"},
         ]
 
@@ -548,6 +575,7 @@ class ProductsView(ctk.CTkFrame):
             price = float(data.get("price_per_meter", 0) or 0)
             measure = float(data.get("measure", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
+            has_dobra = int(data.get("has_dobra", 0) or 0)
             if price <= 0 or measure <= 0:
                 self.app.show_toast("Preço e medida devem ser maiores que zero.", "error")
                 return
@@ -559,6 +587,10 @@ class ProductsView(ctk.CTkFrame):
                 cost=cost,
                 description=data.get("description", ""),
             )
+            # Atualizar dobra separadamente
+            products = db.get_all_products(search=name)
+            if products:
+                db.update_product(products[-1]["id"], has_dobra=has_dobra)
             self.app.show_toast("Produto criado com sucesso!", "success")
             self._load_products()
         except Exception as e:
@@ -577,6 +609,7 @@ class ProductsView(ctk.CTkFrame):
             price = float(data.get("price_per_meter", 0) or 0)
             measure = float(data.get("measure", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
+            has_dobra = int(data.get("has_dobra", 0) or 0)
             db.update_product(
                 product_id,
                 name=data.get("name", ""),
@@ -584,6 +617,7 @@ class ProductsView(ctk.CTkFrame):
                 measure=measure,
                 price_per_meter=price,
                 cost=cost,
+                has_dobra=has_dobra,
                 description=data.get("description", ""),
             )
             self.app.show_toast("Produto atualizado!", "success")

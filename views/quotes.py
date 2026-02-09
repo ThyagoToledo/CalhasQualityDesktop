@@ -572,7 +572,13 @@ class QuotesView(ctk.CTkFrame):
         ).pack(padx=12, pady=(10, 5), anchor="w")
 
         products = db.get_all_products()
-        product_names = [f"{p['name']} ({p['type']}, {p['measure']}cm) - {format_currency(p['price_per_meter'])}/m" for p in products]
+        dobra_value = db.get_dobra_value()
+        product_names = []
+        for p in products:
+            label = f"{p['name']} ({p['type']}, {p['measure']}cm) - {format_currency(p['price_per_meter'])}/m"
+            if p.get('has_dobra'):
+                label += f" [+Dobra {format_currency(dobra_value)}/m]"
+            product_names.append(label)
         product_map = {name: p for name, p in zip(product_names, products)}
 
         add_inner = ctk.CTkFrame(add_frame, fg_color="transparent")
@@ -616,13 +622,17 @@ class QuotesView(ctk.CTkFrame):
                 return
 
             total = meters * product["price_per_meter"]
+            effective_price = product["price_per_meter"]
+            if product.get("has_dobra"):
+                effective_price += dobra_value
+                total = meters * effective_price
             items_list.append({
                 "id": None,
                 "product_id": product["id"],
-                "product_name": product["name"],
+                "product_name": product["name"] + (" (c/ dobra)" if product.get("has_dobra") else ""),
                 "measure": product["measure"],
                 "meters": meters,
-                "price_per_meter": product["price_per_meter"],
+                "price_per_meter": effective_price,
                 "total": total,
             })
             refresh_items_display()
