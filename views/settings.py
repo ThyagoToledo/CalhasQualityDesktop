@@ -7,6 +7,7 @@ Informações da empresa, backup e gestão de dados.
 import customtkinter as ctk
 import shutil
 import os
+import subprocess
 from tkinter import filedialog
 from pathlib import Path
 from database import db
@@ -213,6 +214,18 @@ class SettingsView(ctk.CTkScrollableFrame):
             command=self._restore_from_file,
         ).pack(side="left")
 
+        # Segunda linha de botões
+        backup_btn_frame2 = ctk.CTkFrame(backup_card, fg_color="transparent")
+        backup_btn_frame2.pack(fill="x", padx=15, pady=(0, 15))
+
+        ctk.CTkButton(
+            backup_btn_frame2, text="📂 Abrir Pasta do Backup",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#6b7280", hover_color="#4b5563",
+            height=38, corner_radius=10, width=200,
+            command=self._open_backup_folder,
+        ).pack(side="left")
+
         # === Aparência ===
         theme_card = ctk.CTkFrame(self, fg_color=COLORS["card"], corner_radius=12,
                                    border_width=1, border_color=COLORS["border"])
@@ -408,6 +421,16 @@ class SettingsView(ctk.CTkScrollableFrame):
             self.app.show_view("settings")
         except Exception as e:
             self.app.show_toast(f"Erro na restauração: {e}", "error")
+
+    def _open_backup_folder(self):
+        """Abre a pasta de backup no explorador de arquivos."""
+        try:
+            backup_dir = get_backup_dir()
+            if not os.path.exists(backup_dir):
+                os.makedirs(backup_dir, exist_ok=True)
+            subprocess.Popen(["explorer", os.path.normpath(backup_dir)])
+        except Exception as e:
+            self.app.show_toast(f"Erro ao abrir pasta: {e}", "error")
 
     def _confirm_clear_data(self):
         ConfirmDialog(
