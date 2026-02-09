@@ -158,7 +158,7 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
         pdf.cell(content_width, 5, phone, align='C', new_x='LMARGIN', new_y='NEXT')
         y_pos += 5
 
-    y_pos += 10
+    y_pos += 5
 
     # ==============================
     # 4. TITULO DO ORCAMENTO
@@ -197,15 +197,15 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     pdf.set_font('Helvetica', 'B', 18)
     pdf.set_text_color(*TEXT_DARK)
     pdf.set_xy(margin, y_pos)
-    pdf.cell(content_width, 10, service_title, align='C', new_x='LMARGIN', new_y='NEXT')
-    y_pos += 10
+    pdf.cell(content_width, 7, service_title, align='C', new_x='LMARGIN', new_y='NEXT')
+    y_pos += 6
 
     quote_id = quote.get('id', 0)
-    pdf.set_font('Helvetica', '', 11)
+    pdf.set_font('Helvetica', '', 10)
     pdf.set_text_color(*TEXT_SECONDARY)
     pdf.set_xy(margin, y_pos)
-    pdf.cell(content_width, 6, f"[OR.{quote_id:04d}]", align='C', new_x='LMARGIN', new_y='NEXT')
-    y_pos += 12
+    pdf.cell(content_width, 5, f"[OR.{quote_id:04d}]", align='C', new_x='LMARGIN', new_y='NEXT')
+    y_pos += 8
 
     # ==============================
     # 5. DESCRICAO DAS ATIVIDADES
@@ -213,7 +213,7 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     if notes and len(notes) > 60:
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
-        y_pos += 8
+        y_pos += 5
 
         pdf.set_font('Helvetica', 'B', 14)
         pdf.set_text_color(*TEXT_DARK)
@@ -225,20 +225,20 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
         pdf.set_text_color(*TEXT_SECONDARY)
         pdf.set_xy(margin, y_pos)
         pdf.multi_cell(content_width, 5, notes)
-        y_pos = pdf.get_y() + 8
+        y_pos = pdf.get_y() + 4
 
     # ==============================
     # 6. TABELA DE PRECOS
     # ==============================
     pdf.set_draw_color(*BORDER_COLOR)
     pdf.line(margin, y_pos, page_width - margin, y_pos)
-    y_pos += 8
+    y_pos += 5
 
-    pdf.set_font('Helvetica', 'B', 14)
+    pdf.set_font('Helvetica', 'B', 13)
     pdf.set_text_color(*TEXT_DARK)
     pdf.set_xy(margin, y_pos)
-    pdf.cell(content_width, 8, "Precos", new_x='LMARGIN', new_y='NEXT')
-    y_pos += 12
+    pdf.cell(content_width, 7, "Precos", new_x='LMARGIN', new_y='NEXT')
+    y_pos += 8
 
     if items:
         col_product = content_width * 0.35
@@ -261,11 +261,6 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
             price_per_meter = item.get('price_per_meter', 0)
             item_total = item.get('total', 0)
             measure = item.get('measure', 0)
-
-            # Verificar se precisa nova pagina
-            if y_pos > 255:
-                pdf.add_page()
-                y_pos = 20
 
             row_y = y_pos
 
@@ -335,10 +330,6 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
         methods = [m.strip() for m in payment_methods_str.split(',') if m.strip()]
         num_badge_rows = (len(methods) + 2) // 3
         section_h = 20 + num_badge_rows * 13  # title + rows
-
-        if y_pos + section_h > page_bottom:
-            pdf.add_page()
-            y_pos = 20
 
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
@@ -435,10 +426,6 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
         contract_text_h = contract_lines * 5 + 5
         total_needed = 18 + contract_text_h + 45  # titulo + texto + assinaturas
 
-        if y_pos + total_needed > page_bottom:
-            pdf.add_page()
-            y_pos = 20
-
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
         y_pos += 8
@@ -458,10 +445,7 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     # ==============================
     # 9. ASSINATURAS
     # ==============================
-    # Precisa ~45mm (espaco para assinar + linhas + data)
-    if y_pos + 45 > page_bottom:
-        pdf.add_page()
-        y_pos = 20
+    # Tudo em uma unica pagina
 
     # Posicionar assinaturas logo abaixo do conteudo, com espaco para assinar
     sig_y = y_pos + 25
