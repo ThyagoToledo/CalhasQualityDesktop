@@ -94,7 +94,7 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     # ==============================
     # 2. LOGO DA EMPRESA (circulo)
     # ==============================
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon", "CaLHAS.png")
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon", "Quality.jpeg")
 
     if os.path.exists(logo_path):
         try:
@@ -115,9 +115,9 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
             img.save(temp_logo, 'JPEG', quality=85)
 
             pdf.set_fill_color(*WHITE)
-            pdf.ellipse(logo_x - 2, logo_y_top - 2, logo_size + 4, logo_size + 4, 'F')
+            pdf.rect(logo_x - 2, logo_y_top - 2, logo_size + 4, logo_size + 4, 'F')
             pdf.set_draw_color(*TEXT_LIGHT)
-            pdf.ellipse(logo_x - 2, logo_y_top - 2, logo_size + 4, logo_size + 4, 'D')
+            pdf.rect(logo_x - 2, logo_y_top - 2, logo_size + 4, logo_size + 4, 'D')
 
             pdf.image(temp_logo, logo_x, logo_y_top, logo_size, logo_size)
         except Exception:
@@ -498,6 +498,24 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     pdf.set_text_color(*TEXT_SECONDARY)
     pdf.set_xy(margin, date_y)
     pdf.cell(content_width, 6, date_text, align='C')
+
+    # ==============================
+    # 11. LINK ASSINAR DOCUMENTO
+    # ==============================
+    sign_y = date_y + 10
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_text_color(*BLUE_PRIMARY)
+    sign_text = 'Assinar documento'
+    sign_url = 'https://assinador.iti.br/assinatura/index.xhtml'
+    text_w = pdf.get_string_width(sign_text)
+    sign_x = margin + (content_width - text_w) / 2
+    pdf.set_xy(sign_x, sign_y)
+    pdf.cell(text_w, 6, sign_text, link=sign_url)
+    # Sublinhado decorativo
+    pdf.set_draw_color(*BLUE_PRIMARY)
+    pdf.set_line_width(0.3)
+    pdf.line(sign_x, sign_y + 6, sign_x + text_w, sign_y + 6)
+    pdf.set_line_width(0.2)
 
     # ==============================
     # SALVAR PDF
