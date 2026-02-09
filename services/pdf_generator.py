@@ -7,7 +7,6 @@ Layout: Header azul com logo -> Titulo -> Descricao -> Precos -> Pagamento -> Co
 
 # Garantir que unittest.mock esteja disponível antes de importar fpdf
 # (fpdf.sign importa 'from unittest.mock import patch')
-import unittest
 import unittest.mock
 
 from fpdf import FPDF
