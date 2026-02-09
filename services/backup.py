@@ -7,7 +7,6 @@ O backup é salvo automaticamente a cada operação de criação/edição/exclus
 
 import json
 import os
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
