@@ -12,13 +12,13 @@
 
 ---
 
-### 📥 [Clique aqui para baixar o instalador](https://github.com/ThyagoToledo/CalhasQualityDesktop/releases/latest/download/CalhaGest_Setup_v1.0.0.exe)
+###  [Clique aqui para baixar o instalador](https://github.com/ThyagoToledo/CalhasQualityDesktop/releases/latest/download/CalhaGest_Setup_v1.0.0.exe)
 
 ---
 
 </div>
 
-## 📋 Funcionalidades
+##  Funcionalidades
 
 | Módulo | Descrição |
 |--------|-----------|
@@ -30,7 +30,7 @@
 | **Analíticos** | Gráficos de faturamento, evolução financeira e filtros por período |
 | **Configurações** | Dados da empresa e alternância de tema claro/escuro |
 
-## 🖥️ Screenshots
+##  Screenshots
 
 ### PDF Profissional
 - Layout inspirado no fazerorcamento.com
@@ -39,7 +39,7 @@
 - Ícones Bootstrap para métodos de pagamento
 - Assinaturas e data por extenso
 
-## 🚀 Instalação
+##  Instalação
 
 ### Opção 1: Instalador (Recomendado)
 1. **[Baixe o instalador](https://github.com/ThyagoToledo/CalhasQualityDesktop/releases/latest/download/CalhaGest_Setup_v1.0.0.exe)**
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## 🛠️ Tecnologias
+##  Tecnologias
 
 - **Python 3.11** — Linguagem principal
 - **CustomTkinter** — Interface gráfica moderna (renderização CPU)
@@ -99,7 +99,7 @@ CalhasQualityDesktop/
     └── payment/           # Ícones de pagamento SVG
 ```
 
-## 📄 Licença
+##  Licença
 
 Este projeto é de uso privado da **Calhas Quality**.
 

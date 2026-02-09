@@ -76,6 +76,49 @@ class SettingsView(ctk.CTkScrollableFrame):
             command=self._save_company,
         ).pack(padx=15, pady=(0, 15), anchor="e")
 
+        # === Configurações de Produto (Dobra) ===
+        dobra_card = ctk.CTkFrame(self, fg_color=COLORS["card"], corner_radius=12,
+                                   border_width=1, border_color=COLORS["border"])
+        dobra_card.pack(fill="x", pady=(0, 15))
+
+        ctk.CTkLabel(
+            dobra_card, text="✂️ Configuração de Dobra",
+            font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["text"],
+        ).pack(padx=15, pady=(15, 5), anchor="w")
+
+        ctk.CTkLabel(
+            dobra_card,
+            text="Valor adicional cobrado por metro quando o produto tem dobra.",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["text_secondary"],
+        ).pack(padx=15, pady=(0, 8), anchor="w")
+
+        dobra_inner = ctk.CTkFrame(dobra_card, fg_color="transparent")
+        dobra_inner.pack(fill="x", padx=15, pady=(0, 10))
+
+        ctk.CTkLabel(
+            dobra_inner, text="Valor da Dobra (R$/metro):",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(side="left")
+
+        self.dobra_entry = ctk.CTkEntry(
+            dobra_inner, width=100, height=35,
+            font=ctk.CTkFont(size=13),
+            placeholder_text="5.00",
+        )
+        dobra_val = settings.get("dobra_value", 5.0) or 5.0
+        self.dobra_entry.insert(0, str(float(dobra_val)))
+        self.dobra_entry.pack(side="left", padx=(10, 10))
+
+        ctk.CTkButton(
+            dobra_inner, text="💾 Salvar",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            height=35, width=100, corner_radius=8,
+            command=self._save_dobra,
+        ).pack(side="left")
+
         # === Aparência ===
         theme_card = ctk.CTkFrame(self, fg_color=COLORS["card"], corner_radius=12,
                                    border_width=1, border_color=COLORS["border"])
@@ -172,6 +215,19 @@ class SettingsView(ctk.CTkScrollableFrame):
             db.update_settings(**data)
             self.app.show_toast("Configurações salvas!", "success")
             self.app.refresh_sidebar_company()
+        except Exception as e:
+            self.app.show_toast(f"Erro: {e}", "error")
+
+    def _save_dobra(self):
+        try:
+            val = float(self.dobra_entry.get() or 5.0)
+            if val < 0:
+                self.app.show_toast("Valor da dobra não pode ser negativo.", "error")
+                return
+            db.update_settings(dobra_value=val)
+            self.app.show_toast(f"Valor da dobra atualizado para R$ {val:.2f}/m!", "success")
+        except ValueError:
+            self.app.show_toast("Valor inválido. Use um número (ex: 5.00).", "error")
         except Exception as e:
             self.app.show_toast(f"Erro: {e}", "error")
 
