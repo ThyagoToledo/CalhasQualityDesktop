@@ -98,13 +98,13 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     pdf.rect(0, 0, page_width, 28, 'F')
 
     # ==============================
-    # 2. LOGO DA EMPRESA (circulo)
+    # 2. LOGO DA EMPRESA (quadrado)
     # ==============================
     logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon", "Quality.jpeg")
 
     if os.path.exists(logo_path):
         try:
-            logo_size = 28
+            logo_size = 25
             logo_x = (page_width - logo_size) / 2
             logo_y_top = 14
 
@@ -112,18 +112,13 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             from PIL import Image
             import tempfile
             img = Image.open(logo_path)
-            img = img.resize((128, 128), Image.LANCZOS)
+            img = img.resize((256, 256), Image.LANCZOS)
             if img.mode == 'RGBA':
                 bg = Image.new('RGB', img.size, (255, 255, 255))
                 bg.paste(img, mask=img.split()[3])
                 img = bg
             temp_logo = os.path.join(tempfile.gettempdir(), 'calhagest_logo_small.jpg')
-            img.save(temp_logo, 'JPEG', quality=85)
-
-            pdf.set_fill_color(*WHITE)
-            pdf.rect(logo_x - 2, logo_y_top - 2, logo_size + 4, logo_size + 4, 'F')
-            pdf.set_draw_color(*TEXT_LIGHT)
-            pdf.rect(logo_x - 2, logo_y_top - 2, logo_size + 4, logo_size + 4, 'D')
+            img.save(temp_logo, 'JPEG', quality=90)
 
             pdf.image(temp_logo, logo_x, logo_y_top, logo_size, logo_size)
         except Exception:
@@ -143,7 +138,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     cnpj = settings.get('company_cnpj', '')
     if cnpj:
         pdf.set_font('Helvetica', '', 9)
-        pdf.set_text_color(*TEXT_SECONDARY)
+        pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
         pdf.cell(content_width, 5, cnpj, align='C', new_x='LMARGIN', new_y='NEXT')
         y_pos += 5
@@ -151,7 +146,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     address = settings.get('company_address', '')
     if address:
         pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(*TEXT_SECONDARY)
+        pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
         pdf.cell(content_width, 5, address, align='C', new_x='LMARGIN', new_y='NEXT')
         y_pos += 5
@@ -159,7 +154,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     phone = settings.get('company_phone', '')
     if phone:
         pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(*TEXT_SECONDARY)
+        pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
         pdf.cell(content_width, 5, phone, align='C', new_x='LMARGIN', new_y='NEXT')
         y_pos += 5
@@ -254,7 +249,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
         # Cabecalho das colunas
         pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(*TEXT_LIGHT)
+        pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin + col_product, y_pos)
         pdf.cell(col_qty, 5, "Qtde.", align='C')
         pdf.set_xy(margin + col_product + col_qty, y_pos)
@@ -281,7 +276,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
             # Quantidade
             pdf.set_font('Helvetica', '', 9)
-            pdf.set_text_color(*TEXT_SECONDARY)
+            pdf.set_text_color(*TEXT_DARK)
             pdf.set_xy(margin + col_product, row_y)
             pdf.cell(col_qty, 7, f"{meters:.2f}m", align='C')
 
@@ -443,7 +438,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         y_pos += 10
 
         pdf.set_font('Helvetica', '', 10)
-        pdf.set_text_color(*TEXT_SECONDARY)
+        pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
         pdf.multi_cell(content_width, 5, contract)
         y_pos = pdf.get_y() + 5
@@ -464,7 +459,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     pdf.line(margin, line_y, margin + half_width, line_y)
 
     pdf.set_font('Helvetica', '', 10)
-    pdf.set_text_color(*TEXT_SECONDARY)
+    pdf.set_text_color(*TEXT_DARK)
     pdf.set_xy(margin, line_y + 2)
     pdf.cell(half_width, 6, company_name, align='C')
 
@@ -472,6 +467,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     client_line_x = margin + half_width + 30
     pdf.line(client_line_x, line_y, client_line_x + half_width, line_y)
 
+    pdf.set_text_color(*TEXT_DARK)
     pdf.set_xy(client_line_x, line_y + 2)
     pdf.cell(half_width, 6, "Cliente", align='C')
 
@@ -485,7 +481,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     date_text = _fmt_date_extenso(created_at[:10] if created_at else None)
 
     pdf.set_font('Helvetica', 'B', 9)
-    pdf.set_text_color(*TEXT_SECONDARY)
+    pdf.set_text_color(*TEXT_DARK)
     pdf.set_xy(margin, date_y)
     pdf.cell(content_width, 6, date_text, align='C')
 
