@@ -12,10 +12,6 @@
 
 ---
 
-###  [Clique aqui para baixar o instalador](https://github.com/ThyagoToledo/CalhasQualityDesktop/releases/latest/download/CalhaGest_Setup_v1.0.0.exe)
-
----
-
 </div>
 
 ##  Funcionalidades
@@ -41,13 +37,7 @@
 
 ##  Instalação
 
-### Opção 1: Instalador (Recomendado)
-1. **[Baixe o instalador](https://github.com/ThyagoToledo/CalhasQualityDesktop/releases/latest/download/CalhaGest_Setup_v1.0.0.exe)**
-2. Execute `CalhaGest_Setup_v1.0.0.exe`
-3. Siga as instruções na tela
-4. Pronto! O app estará disponível no menu Iniciar
-
-### Opção 2: Rodar via Python
+### Rodar via Python
 ```bash
 # Clone o repositório
 git clone https://github.com/ThyagoToledo/CalhasQualityDesktop.git
