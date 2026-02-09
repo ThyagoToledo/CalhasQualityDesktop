@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportMissingImports=false, reportUnusedImport=false, reportUnusedVariable=false
 """
 CalhaGest - Gerador de PDF Profissional
 Gera documentos PDF com layout inspirado no fazerorcamento.com.
@@ -7,11 +8,12 @@ Layout: Header azul com logo -> Titulo -> Descricao -> Precos -> Pagamento -> Co
 
 # Garantir que unittest.mock esteja disponível antes de importar fpdf
 # (fpdf.sign importa 'from unittest.mock import patch')
-import unittest.mock
+import unittest.mock  # noqa: F401
 
-from fpdf import FPDF
+from fpdf import FPDF  # type: ignore[import-untyped]
 from datetime import datetime
 import os
+from typing import Any, Optional
 
 
 # Meses em portugues
@@ -34,7 +36,7 @@ WHITE = (255, 255, 255)
 BG_LIGHT = (248, 250, 252)
 
 
-def _fmt_currency(value):
+def _fmt_currency(value: Any) -> str:
     """Formata valor em R$ brasileiro."""
     try:
         val = float(value or 0)
@@ -44,7 +46,7 @@ def _fmt_currency(value):
         return "R$ 0,00"
 
 
-def _fmt_date_extenso(date_str=None):
+def _fmt_date_extenso(date_str: Optional[str] = None) -> str:
     """Formata data por extenso: 'Criado em 27 de Janeiro de 2026'."""
     try:
         if date_str:
@@ -62,10 +64,10 @@ def _fmt_date_extenso(date_str=None):
 class QuotePDF(FPDF):
     """PDF profissional estilo fazerorcamento.com."""
 
-    def __init__(self, company_name="CalhaGest", company_info=None):
+    def __init__(self, company_name: str = "CalhaGest", company_info: Optional[dict[str, Any]] = None):
         super().__init__()
         self.company_name = company_name
-        self.company_info = company_info or {}
+        self.company_info: dict[str, Any] = company_info or {}
         self.set_auto_page_break(auto=True, margin=25)
 
     def header(self):
@@ -75,7 +77,7 @@ class QuotePDF(FPDF):
         pass
 
 
-def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: str = None) -> str:
+def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[str, Any]] = None, output_path: Optional[str] = None) -> str:
     """
     Gera um PDF profissional do orcamento no estilo fazerorcamento.com.
     """
@@ -169,8 +171,8 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     # ==============================
     items = quote.get('items', [])
     if items:
-        product_types = []
-        seen = set()
+        product_types: list[str] = []
+        seen: set[str] = set()
         for item in items:
             name = item.get('product_name', '').lower()
             if 'calha' in name and 'calhas' not in seen:
@@ -327,13 +329,13 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
     # ==============================
     # 7. METODOS DE PAGAMENTO
     # ==============================
-    page_bottom = 297 - 25  # A4 height minus auto-break margin
+    page_bottom = 297 - 25  # A4 height minus auto-break margin  # noqa
 
     payment_methods_str = quote.get('payment_methods', '')
     if payment_methods_str:
         methods = [m.strip() for m in payment_methods_str.split(',') if m.strip()]
         num_badge_rows = (len(methods) + 2) // 3
-        section_h = 20 + num_badge_rows * 13  # title + rows
+        _ = 20 + num_badge_rows * 13  # section_h estimate
 
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
@@ -411,12 +413,12 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
                 pdf.set_font('Helvetica', '', 9)
                 pdf.set_text_color(*TEXT_DARK)
                 pdf.set_xy(icon_box_x + icon_box_w + 2, y_pos)
-                pdf.cell(label_w, badge_h, label)
+                pdf.cell(label_w, badge_h, label or '')
             else:
                 pdf.set_font('Helvetica', '', 9)
                 pdf.set_text_color(*TEXT_DARK)
                 pdf.set_xy(badge_x + 4, y_pos)
-                pdf.cell(badge_total_w - 8, badge_h, label)
+                pdf.cell(badge_total_w - 8, badge_h, label or '')
 
         y_pos += badge_h + 10
 
@@ -428,7 +430,7 @@ def generate_quote_pdf(quote: dict, company_settings: dict = None, output_path: 
         # Estimar espaco: titulo(18) + texto + assinaturas(45)
         contract_lines = max(1, len(contract) // 80 + 1)
         contract_text_h = contract_lines * 5 + 5
-        total_needed = 18 + contract_text_h + 45  # titulo + texto + assinaturas
+        _ = 18 + contract_text_h + 45  # total_needed estimate
 
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)

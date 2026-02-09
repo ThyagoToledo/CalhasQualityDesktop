@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 """
 CalhaGest - Sistema de Backup Automático
 Exporta/importa todos os dados do banco para um arquivo JSON em Documentos.
@@ -9,7 +10,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 # Chave usada no settings do banco para armazenar o caminho do backup
@@ -61,7 +62,7 @@ def get_backup_filepath() -> str:
     return os.path.join(get_backup_dir(), BACKUP_FILENAME)
 
 
-def export_all_data() -> Dict:
+def export_all_data() -> Dict[str, Any]:
     """Exporta todos os dados do banco de dados para um dicionário."""
     from database import db
     conn = db.get_connection()
@@ -169,7 +170,7 @@ def trigger_backup():
         pass  # Backup silencioso - não interromper operação principal
 
 
-def load_backup(filepath: str = None) -> Optional[Dict]:
+def load_backup(filepath: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Lê o arquivo de backup e retorna os dados.
     Se filepath não for informado, usa o caminho padrão.
@@ -186,7 +187,7 @@ def load_backup(filepath: str = None) -> Optional[Dict]:
     return data
 
 
-def restore_from_backup(filepath: str = None) -> Dict:
+def restore_from_backup(filepath: Optional[str] = None) -> Dict[str, Any]:
     """
     Restaura todos os dados a partir de um arquivo de backup JSON.
     Retorna um resumo com a contagem de registros restaurados.
