@@ -41,6 +41,7 @@ def init_database():
             company_cnpj TEXT,
             company_logo BLOB,
             dobra_value REAL DEFAULT 5.0,
+            backup_path TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -49,6 +50,12 @@ def init_database():
     # Migração: adicionar coluna dobra_value se não existir
     try:
         cursor.execute("ALTER TABLE settings ADD COLUMN dobra_value REAL DEFAULT 5.0")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+
+    # Migração: adicionar coluna backup_path se não existir
+    try:
+        cursor.execute("ALTER TABLE settings ADD COLUMN backup_path TEXT")
     except sqlite3.OperationalError:
         pass  # Coluna já existe
     
@@ -200,6 +207,15 @@ def init_database():
     conn.close()
 
 
+def _auto_backup():
+    """Dispara backup automático silencioso após operações de escrita."""
+    try:
+        from services.backup import trigger_backup
+        trigger_backup()
+    except Exception:
+        pass  # Nunca interromper operação principal por falha de backup
+
+
 # ============== CRUD de Produtos ==============
 
 def create_product(name: str, type: str, measure: float, price_per_meter: float, 
@@ -214,6 +230,7 @@ def create_product(name: str, type: str, measure: float, price_per_meter: float,
     product_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_backup()
     return product_id
 
 
@@ -273,6 +290,8 @@ def update_product(product_id: int, **kwargs) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -284,6 +303,8 @@ def delete_product(product_id: int) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -304,6 +325,7 @@ def create_quote(client_name: str, client_phone: str = "", client_address: str =
     quote_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_backup()
     return quote_id
 
 
@@ -377,6 +399,8 @@ def update_quote(quote_id: int, **kwargs) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -388,6 +412,8 @@ def delete_quote(quote_id: int) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -459,6 +485,7 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
     conn.close()
     
     recalculate_quote_totals(quote_id)
+    _auto_backup()
     return item_id
 
 
@@ -479,6 +506,7 @@ def remove_quote_item(item_id: int) -> bool:
     conn.close()
     
     recalculate_quote_totals(quote_id)
+    _auto_backup()
     return True
 
 
@@ -496,6 +524,7 @@ def create_inventory_item(name: str, type: str, quantity: float,
     item_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_backup()
     return item_id
 
 
@@ -554,6 +583,8 @@ def update_inventory_quantity(item_id: int, quantity_change: float,
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -565,6 +596,8 @@ def delete_inventory_item(item_id: int) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -595,6 +628,7 @@ def create_installation(quote_id: int, scheduled_date: str, notes: str = "") -> 
     installation_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_backup()
     return installation_id
 
 
@@ -638,6 +672,8 @@ def update_installation_status(installation_id: int, status: str) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -649,6 +685,8 @@ def delete_installation(installation_id: int) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -671,7 +709,7 @@ def update_settings(**kwargs) -> bool:
     
     allowed_fields = ['company_name', 'company_phone', 'company_email',
                       'company_address', 'company_cnpj', 'company_logo',
-                      'dobra_value']
+                      'dobra_value', 'backup_path']
     
     fields = []
     values = []
@@ -690,6 +728,8 @@ def update_settings(**kwargs) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -716,6 +756,7 @@ def create_product_type(key: str, label: str) -> int:
     type_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_backup()
     return type_id
 
 
@@ -727,6 +768,8 @@ def delete_product_type(type_id: int) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -759,6 +802,7 @@ def add_product_material(product_id: int, inventory_id: int,
     mat_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_backup()
     return mat_id
 
 
@@ -770,6 +814,8 @@ def remove_product_material(material_id: int) -> bool:
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
+    if success:
+        _auto_backup()
     return success
 
 
@@ -833,6 +879,7 @@ def deduct_stock_for_quote(quote_id: int) -> List[str]:
     
     conn.commit()
     conn.close()
+    _auto_backup()
     return warnings
 
 

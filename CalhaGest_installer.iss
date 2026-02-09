@@ -2,7 +2,7 @@
 ; Gera instalador profissional para Windows
 
 #define MyAppName "CalhaGest"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "Calhas Quality"
 #define MyAppExeName "CalhaGest.exe"
 
@@ -15,7 +15,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=CalhaGest_Setup_v1.0.0
+OutputBaseFilename=CalhaGest_Setup_v2.1.0
 SetupIconFile=icon\CalhaGest.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
