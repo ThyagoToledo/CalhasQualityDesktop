@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# PyInstaller
+*.spec
+
+# Inno Setup
+installer/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Database (dados locais do usuario)
+*.db
+
+# PDFs gerados
+pdfs/
+
+# Temp
+*.tmp
+*.log

@@ -1,0 +1,209 @@
+# -*- coding: utf-8 -*-
+"""
+CalhaGest - Sistema de Gestão de Calhas
+Interface gráfica usando CustomTkinter (renderização CPU, sem problemas com GPU).
+"""
+
+import customtkinter as ctk
+from pathlib import Path
+import sys
+import os
+
+# Garantir que o diretório raiz do projeto esteja no path
+ROOT_DIR = Path(__file__).parent
+sys.path.insert(0, str(ROOT_DIR))
+
+from database import db
+
+# ============== Constantes de Cores ==============
+COLORS = {
+    "primary": "#2563eb",
+    "primary_hover": "#1d4ed8",
+    "primary_light": "#dbeafe",
+    "success": "#10b981",
+    "success_light": "#d1fae5",
+    "warning": "#f59e0b",
+    "warning_light": "#fef3c7",
+    "error": "#ef4444",
+    "error_light": "#fee2e2",
+    "bg": "#f0f2f5",
+    "card": "#ffffff",
+    "text": "#1e293b",
+    "text_secondary": "#64748b",
+    "border": "#e2e8f0",
+    "sidebar_bg": "#1e293b",
+    "sidebar_text": "#94a3b8",
+    "sidebar_active": "#2563eb",
+    "sidebar_hover": "#334155",
+}
+
+STATUS_COLORS = {
+    "draft": ("#9ca3af", "Rascunho"),
+    "sent": ("#3b82f6", "Enviado"),
+    "approved": ("#22c55e", "Aprovado"),
+    "completed": ("#a855f7", "Concluído"),
+    "pending": ("#f59e0b", "Pendente"),
+    "in-progress": ("#3b82f6", "Em Progresso"),
+    "cancelled": ("#ef4444", "Cancelado"),
+}
+
+
+class CalhaGestApp(ctk.CTk):
+    """Aplicativo principal CalhaGest."""
+
+    def __init__(self):
+        super().__init__()
+
+        # Configuração da janela
+        self.title("CalhaGest - Gestão de Calhas")
+        self.geometry("1280x720")
+        self.minsize(1024, 600)
+
+        # Ícone
+        self._set_icon()
+
+        # Tema
+        self.current_theme = "light"
+        ctk.set_appearance_mode("light")
+        ctk.set_default_color_theme("blue")
+        self.configure(fg_color=COLORS["bg"])
+
+        # Estado
+        self.current_view_name = None
+
+        # Layout: Sidebar + Conteúdo
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Sidebar
+        from components.navigation import Sidebar
+        settings = db.get_settings()
+        company_name = settings.get("company_name", "CalhaGest")
+        self.sidebar = Sidebar(self, self.show_view, company_name=company_name)
+        self.sidebar.grid(row=0, column=0, sticky="nsw")
+
+        # Área de conteúdo
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        self.content_frame.grid(row=0, column=1, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_rowconfigure(0, weight=1)
+
+        # Toast container
+        self._toast_label = None
+
+        # Exibir dashboard
+        self.show_view("dashboard")
+
+    def _set_icon(self):
+        """Define o ícone da janela."""
+        try:
+            icon_path = ROOT_DIR / "icon" / "CaLHAS.png"
+            if icon_path.exists():
+                from PIL import Image, ImageTk
+                img = Image.open(str(icon_path))
+                photo = ImageTk.PhotoImage(img.resize((32, 32)))
+                self.iconphoto(True, photo)
+                self._icon_ref = photo
+        except Exception:
+            pass
+
+    def show_view(self, view_name):
+        """Alterna para uma view diferente."""
+        if view_name == self.current_view_name:
+            return
+
+        # Limpar conteúdo atual
+        for widget in self.content_frame.winfo_children():
+            if widget != self._toast_label:
+                widget.destroy()
+
+        # Importar e criar a view
+        view = None
+        if view_name == "dashboard":
+            from views.dashboard import DashboardView
+            view = DashboardView(self.content_frame, self)
+        elif view_name == "products":
+            from views.products import ProductsView
+            view = ProductsView(self.content_frame, self)
+        elif view_name == "quotes":
+            from views.quotes import QuotesView
+            view = QuotesView(self.content_frame, self)
+        elif view_name == "inventory":
+            from views.inventory import InventoryView
+            view = InventoryView(self.content_frame, self)
+        elif view_name == "installations":
+            from views.installations import InstallationsView
+            view = InstallationsView(self.content_frame, self)
+        elif view_name == "analytics":
+            from views.analytics import AnalyticsView
+            view = AnalyticsView(self.content_frame, self)
+        elif view_name == "settings":
+            from views.settings import SettingsView
+            view = SettingsView(self.content_frame, self)
+
+        if view:
+            view.pack(fill="both", expand=True, padx=15, pady=15)
+
+        self.current_view_name = view_name
+        self.sidebar.set_active(view_name)
+
+    def toggle_theme(self):
+        """Alterna entre tema claro e escuro."""
+        if self.current_theme == "light":
+            self.current_theme = "dark"
+            ctk.set_appearance_mode("dark")
+            self.show_toast("Tema escuro ativado 🌙", "info")
+        else:
+            self.current_theme = "light"
+            ctk.set_appearance_mode("light")
+            self.show_toast("Tema claro ativado ☀️", "info")
+        
+        # Recarregar view atual para atualizar ícones e cores
+        current = self.current_view_name
+        self.current_view_name = None
+        self.show_view(current)
+
+    def show_toast(self, message, type_="info"):
+        """Exibe uma notificação temporária no topo."""
+        colors = {
+            "info": COLORS["primary"],
+            "success": COLORS["success"],
+            "warning": COLORS["warning"],
+            "error": COLORS["error"],
+        }
+        bg = colors.get(type_, COLORS["primary"])
+
+        # Remover toast anterior
+        if self._toast_label and self._toast_label.winfo_exists():
+            self._toast_label.destroy()
+
+        self._toast_label = ctk.CTkLabel(
+            self.content_frame,
+            text=f"  {message}  ",
+            fg_color=bg,
+            text_color="white",
+            corner_radius=8,
+            height=36,
+            font=ctk.CTkFont(size=13),
+        )
+        self._toast_label.place(relx=0.5, y=10, anchor="n")
+        self._toast_label.lift()
+
+        # Auto-remover após 3 segundos
+        self.after(3000, self._hide_toast)
+
+    def _hide_toast(self):
+        if self._toast_label and self._toast_label.winfo_exists():
+            self._toast_label.destroy()
+            self._toast_label = None
+
+    def refresh_sidebar_company(self):
+        """Atualiza o nome da empresa na sidebar."""
+        settings = db.get_settings()
+        company_name = settings.get("company_name", "CalhaGest")
+        self.sidebar.update_company_name(company_name)
+
+
+if __name__ == "__main__":
+    app = CalhaGestApp()
+    app.mainloop()
