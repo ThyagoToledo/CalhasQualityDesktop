@@ -5,6 +5,11 @@ Gera documentos PDF com layout inspirado no fazerorcamento.com.
 Layout: Header azul com logo -> Titulo -> Descricao -> Precos -> Pagamento -> Contrato -> Assinaturas -> Rodape.
 """
 
+# Garantir que unittest.mock esteja disponível antes de importar fpdf
+# (fpdf.sign importa 'from unittest.mock import patch')
+import unittest
+import unittest.mock
+
 from fpdf import FPDF
 from datetime import datetime
 import os

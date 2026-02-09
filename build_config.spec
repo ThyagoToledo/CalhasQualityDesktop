@@ -6,8 +6,13 @@ Inclui todas as dependências necessárias para evitar erros como 'No module nam
 
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
+
+# Coletar todos os submódulos necessários
+fpdf_submodules = collect_submodules('fpdf')
+unittest_submodules = collect_submodules('unittest')
 
 a = Analysis(
     ['main.py'],
@@ -34,19 +39,8 @@ a = Analysis(
         'PIL.ImageDraw',
         'PIL.ImageFont',
         
-        # fpdf2 e suas dependências
-        'fpdf',
-        'fpdf.enums',
-        'fpdf.fonts',
-        'fpdf.html',
-        'fpdf.image_parsing',
-        'fpdf.line_break',
-        'fpdf.output',
-        'fpdf.recorder',
-        'fpdf.svg',
-        'fpdf.syntax',
-        'fpdf.table',
-        'fpdf.util',
+        # fpdf2 e todas as suas dependências (coletadas automaticamente)
+        *fpdf_submodules,
         'defusedxml',
         'defusedxml.ElementTree',
         'fonttools',
@@ -59,9 +53,10 @@ a = Analysis(
         'matplotlib.figure',
         'matplotlib.pyplot',
         
-        # Módulos padrão que o PyInstaller pode não incluir
-        'unittest',
-        'unittest.mock',
+        # unittest (necessário pelo fpdf.sign que faz 'from unittest.mock import patch')
+        *unittest_submodules,
+        
+        # Outros módulos padrão que o PyInstaller pode não incluir
         'html.parser',
         'xml.etree.ElementTree',
         'sqlite3',
