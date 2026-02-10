@@ -114,6 +114,18 @@ def init_database():
     except sqlite3.OperationalError:
         pass
     
+    # Migração: adicionar coluna is_installed se não existir
+    try:
+        cursor.execute("ALTER TABLE products ADD COLUMN is_installed INTEGER DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+
+    # Migração: adicionar coluna pricing_unit se não existir (metro ou unidade)
+    try:
+        cursor.execute("ALTER TABLE products ADD COLUMN pricing_unit TEXT DEFAULT 'metro'")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+
     # Migrar dados antigos: se measure > 0 e width/length = 0, copiar measure para width
     cursor.execute("UPDATE products SET width = measure WHERE width = 0 AND measure > 0")
     
@@ -151,6 +163,12 @@ def init_database():
         )
     """)
     
+    # Migração: adicionar coluna quote_type se não existir
+    try:
+        cursor.execute("ALTER TABLE quotes ADD COLUMN quote_type TEXT DEFAULT 'instalado'")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+
     # Migração: adicionar coluna payment_methods se não existir
     try:
         cursor.execute("ALTER TABLE quotes ADD COLUMN payment_methods TEXT DEFAULT ''")
@@ -212,6 +230,12 @@ def init_database():
     # Migrar dados antigos de quote_items
     cursor.execute("UPDATE quote_items SET width = measure WHERE width = 0 AND measure > 0")
     
+    # Migração: adicionar coluna pricing_unit a quote_items
+    try:
+        cursor.execute("ALTER TABLE quote_items ADD COLUMN pricing_unit TEXT DEFAULT 'metro'")
+    except sqlite3.OperationalError:
+        pass
+
     # Tabela de Inventário/Estoque
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
@@ -278,14 +302,15 @@ def _auto_backup():
 
 def create_product(name: str, type: str, measure: float, price_per_meter: float, 
                    cost: float = 0, description: str = "",
-                   width: float = 0, length: float = 0) -> int:
+                   width: float = 0, length: float = 0,
+                   is_installed: int = 1, pricing_unit: str = "metro") -> int:
     """Cria um novo produto e retorna o ID."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO products (name, type, measure, price_per_meter, cost, description, width, length)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (name, type, measure, price_per_meter, cost, description, width, length))
+        INSERT INTO products (name, type, measure, price_per_meter, cost, description, width, length, is_installed, pricing_unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (name, type, measure, price_per_meter, cost, description, width, length, is_installed, pricing_unit))
     product_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -334,7 +359,7 @@ def update_product(product_id: int, **kwargs) -> bool:
     fields = []
     values = []
     for key, value in kwargs.items():
-        if key in ['name', 'type', 'measure', 'price_per_meter', 'cost', 'has_dobra', 'description', 'width', 'length']:
+        if key in ['name', 'type', 'measure', 'price_per_meter', 'cost', 'has_dobra', 'description', 'width', 'length', 'is_installed', 'pricing_unit']:
             fields.append(f"{key} = ?")
             values.append(value)
     
@@ -439,7 +464,7 @@ def update_quote(quote_id: int, **kwargs) -> bool:
     allowed_fields = ['client_name', 'client_phone', 'client_address', 'status',
                       'technical_notes', 'contract_terms', 'payment_methods',
                       'scheduled_date', 'total', 'cost_total', 'profit', 'profitability',
-                      'discount_total', 'discount_type']
+                      'discount_total', 'discount_type', 'quote_type']
     
     fields = []
     values = []
@@ -563,14 +588,20 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
     except (IndexError, KeyError):
         p_length = 0
     
+    # Acessar pricing_unit com segurança
+    try:
+        p_pricing_unit = product['pricing_unit'] or 'metro'
+    except (IndexError, KeyError):
+        p_pricing_unit = 'metro'
+
     cursor.execute("""
         INSERT INTO quote_items (quote_id, product_id, product_name, measure, 
                                 meters, price_per_meter, total, cost_per_meter, cost_total, discount,
-                                width, length)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                width, length, pricing_unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (quote_id, product_id, product['name'], product['measure'],
           meters, price_per_meter, total, cost_per_meter, cost_total, discount,
-          p_width, p_length))
+          p_width, p_length, p_pricing_unit))
     
     item_id = cursor.lastrowid
     conn.commit()

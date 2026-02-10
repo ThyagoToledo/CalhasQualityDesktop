@@ -179,10 +179,34 @@ class ProductsView(ctk.CTkFrame):
                 corner_radius=4,
             ).pack(side="left", padx=(5, 0))
 
+        # Badge de instalado/não instalado
+        is_installed = bool(product.get("is_installed", 1))
+        inst_text = "🔧 Instalado" if is_installed else "📦 Não Instalado"
+        inst_fg = COLORS["success_light"] if is_installed else COLORS["warning_light"]
+        inst_tc = COLORS["success"] if is_installed else COLORS["warning"]
+        ctk.CTkLabel(
+            name_frame, text=f"  {inst_text}  ",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            fg_color=inst_fg, text_color=inst_tc,
+            corner_radius=4,
+        ).pack(side="left", padx=(5, 0))
+
+        # Badge de unidade de preço
+        pricing_unit = product.get('pricing_unit', 'metro')
+        pu_text = "📏 Metro" if pricing_unit == 'metro' else "📦 Unidade"
+        ctk.CTkLabel(
+            name_frame, text=f"  {pu_text}  ",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            fg_color=COLORS["primary_light"], text_color=COLORS["primary"],
+            corner_radius=4,
+        ).pack(side="left", padx=(5, 0))
+
         dims = format_dimensions(product.get('width', 0), product.get('length', 0))
-        details = f"Dimensões: {dims}  •  Preço: {format_currency(product['price_per_meter'])}/m"
+        pricing_unit = product.get('pricing_unit', 'metro')
+        unit_label = '/m' if pricing_unit == 'metro' else '/un'
+        details = f"Dimensões: {dims}  •  Preço: {format_currency(product['price_per_meter'])}{unit_label}"
         if product.get("cost") and product["cost"] > 0:
-            details += f"  •  Custo: {format_currency(product['cost'])}/m"
+            details += f"  •  Custo: {format_currency(product['cost'])}{unit_label}"
         if product.get("has_dobra"):
             dobra_val = db.get_dobra_value()
             details += f"  •  Dobra: +{format_currency(dobra_val)}/m"
@@ -555,10 +579,14 @@ class ProductsView(ctk.CTkFrame):
             {"key": "type", "label": "Tipo", "type": "option",
              "options": type_keys, "required": True},
             {"key": "width", "label": "Largura (cm)", "type": "number", "required": True},
-            {"key": "price_per_meter", "label": "Preço por metro (R$)", "type": "number", "required": True},
-            {"key": "cost", "label": "Custo por metro (R$)", "type": "number"},
+            {"key": "price_per_meter", "label": "Preço (R$)", "type": "number", "required": True},
+            {"key": "cost", "label": "Custo (R$)", "type": "number"},
             {"key": "has_dobra", "label": "Dobra", "type": "option", "options": ["0", "1"],
              "option_labels": {"0": "Sem Dobra", "1": "Com Dobra"}},
+            {"key": "is_installed", "label": "Instalado?", "type": "option", "options": ["1", "0"],
+             "option_labels": {"1": "Sim - Produto Instalado", "0": "Não - Produto Não Instalado"}},
+            {"key": "pricing_unit", "label": "Cobrança por", "type": "option", "options": ["metro", "unidade"],
+             "option_labels": {"metro": "Metro (R$/m)", "unidade": "Unidade (R$/un)"}},
             {"key": "description", "label": "Descrição", "type": "text"},
         ]
 
@@ -579,6 +607,8 @@ class ProductsView(ctk.CTkFrame):
             width = float(data.get("width", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
             has_dobra = int(data.get("has_dobra", 0) or 0)
+            is_installed = int(data.get("is_installed", 1) if data.get("is_installed") is not None else 1)
+            pricing_unit = data.get("pricing_unit", "metro") or "metro"
             if price <= 0 or width <= 0:
                 self.app.show_toast("Preço e largura devem ser maiores que zero.", "error")
                 return
@@ -591,6 +621,8 @@ class ProductsView(ctk.CTkFrame):
                 description=data.get("description", ""),
                 width=width,
                 length=0,
+                is_installed=is_installed,
+                pricing_unit=pricing_unit,
             )
             # Atualizar dobra separadamente
             products = db.get_all_products(search=name)
@@ -615,6 +647,8 @@ class ProductsView(ctk.CTkFrame):
             width = float(data.get("width", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
             has_dobra = int(data.get("has_dobra", 0) or 0)
+            is_installed = int(data.get("is_installed", 1) if data.get("is_installed") is not None else 1)
+            pricing_unit = data.get("pricing_unit", "metro") or "metro"
             db.update_product(
                 product_id,
                 name=data.get("name", ""),
@@ -626,6 +660,8 @@ class ProductsView(ctk.CTkFrame):
                 description=data.get("description", ""),
                 width=width,
                 length=0,
+                is_installed=is_installed,
+                pricing_unit=pricing_unit,
             )
             self.app.show_toast("Produto atualizado!", "success")
             self._load_products()

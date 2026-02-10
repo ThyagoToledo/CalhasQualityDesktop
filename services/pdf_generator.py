@@ -165,6 +165,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     # ==============================
     # 4. TITULO DO ORCAMENTO
     # ==============================
+    qt = quote.get('quote_type', 'instalado') or 'instalado'
     items = quote.get('items', [])
     if items:
         product_types: list[str] = []
@@ -185,11 +186,14 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
                 seen.add(name)
 
         if product_types:
-            service_title = f"Instalacao de {' e '.join(product_types)}"
+            if qt == 'instalado':
+                service_title = f"Instalacao"
+            else:
+                service_title = f"Orcamento"
         else:
-            service_title = "Servico de Calhas"
+            service_title = "Instalacao" if qt == 'instalado' else "Orcamento"
     else:
-        service_title = "Orcamento de Servicos"
+        service_title = "Instalacao" if qt == 'instalado' else "Orcamento de Servicos"
 
     # Se tem notas tecnicas curtas, usar como titulo
     notes = quote.get('technical_notes', '')
@@ -257,7 +261,31 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         pdf.cell(col_unit_price, 5, "Valor unitario", align='C')
         y_pos += 7
 
+        def _check_page_break(current_y, needed_height=12):
+            """Verifica se precisa de nova pagina e adiciona se necessario."""
+            page_bottom_limit = 297 - 25  # A4 height minus margin
+            if current_y + needed_height > page_bottom_limit:
+                pdf.add_page()
+                current_y = 20
+                # Repetir cabeçalho da tabela na nova página
+                pdf.set_font('Helvetica', 'B', 12)
+                pdf.set_text_color(*TEXT_DARK)
+                pdf.set_xy(margin, current_y)
+                pdf.cell(content_width, 7, "Precos (continuacao)", new_x='LMARGIN', new_y='NEXT')
+                current_y += 9
+                pdf.set_font('Helvetica', '', 8)
+                pdf.set_text_color(*TEXT_DARK)
+                pdf.set_xy(margin + col_product, current_y)
+                pdf.cell(col_qty, 5, "Qtde.", align='C')
+                pdf.set_xy(margin + col_product + col_qty, current_y)
+                pdf.cell(col_unit_price, 5, "Valor unitario", align='C')
+                current_y += 7
+            return current_y
+
         for item in items:
+            # Verificar se precisa de nova pagina antes de cada item
+            y_pos = _check_page_break(y_pos, 12)
+
             product_name = item.get('product_name', '-')
             meters = item.get('meters', 0)
             price_per_meter = item.get('price_per_meter', 0)
@@ -266,6 +294,8 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             item_discount = item.get('discount', 0)
             item_width = item.get('width', 0)
             item_length = item.get('length', 0)
+            item_pricing_unit = item.get('pricing_unit', 'metro') or 'metro'
+            unit_suffix = 'Un' if item_pricing_unit == 'unidade' else 'm'
 
             row_y = y_pos
 
@@ -286,7 +316,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             pdf.set_font('Helvetica', '', 9)
             pdf.set_text_color(*TEXT_DARK)
             pdf.set_xy(margin + col_product, row_y)
-            pdf.cell(col_qty, 7, f"{meters:.2f}m", align='C')
+            pdf.cell(col_qty, 7, f"{meters:.2f}{unit_suffix}", align='C')
 
             # Valor unitario
             pdf.set_xy(margin + col_product + col_qty, row_y)
@@ -309,6 +339,8 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
         # Linha pontilhada
         y_pos += 2
+        # Verificar quebra de pagina antes dos totais
+        y_pos = _check_page_break(y_pos, 30)
         pdf.set_draw_color(*BORDER_COLOR)
         dash_x = margin
         while dash_x < page_width - margin:
@@ -367,7 +399,16 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     # ==============================
     from database import db as _db
     pay_summary = _db.get_payment_summary(quote.get('id', 0))
+
+    def _ensure_space(current_y, needed=20):
+        """Garante espaco na pagina, adiciona nova pagina se necessario."""
+        if current_y + needed > 297 - 25:
+            pdf.add_page()
+            return 20
+        return current_y
+
     if pay_summary and pay_summary['total_paid'] > 0:
+        y_pos = _ensure_space(y_pos, 30)
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
         y_pos += 5
@@ -409,6 +450,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     if payment_methods_str:
         methods = [m.strip() for m in payment_methods_str.split(',') if m.strip()]
 
+        y_pos = _ensure_space(y_pos, 25)
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
         y_pos += 5
@@ -504,6 +546,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         contract_text_h = contract_lines * 5 + 5
         _ = 18 + contract_text_h + 45  # total_needed estimate
 
+        y_pos = _ensure_space(y_pos, 30)
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
         y_pos += 5
@@ -519,6 +562,8 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         pdf.set_xy(margin, y_pos)
         pdf.multi_cell(content_width, 5, contract)
         y_pos = pdf.get_y() + 3
+        # Atualizar y_pos apos multi_cell (pode ter quebrado pagina internamente)
+        y_pos = _ensure_space(y_pos, 10)
 
     # ==============================
     # 9. ASSINATURAS + DATA + LINK (bloco unico)

@@ -47,9 +47,29 @@ class QuotesView(ctk.CTkFrame):
         # Cabeçalho
         header = create_header(
             self, "Orçamentos", "Gerencie seus orçamentos",
-            action_text="Novo Orçamento", action_command=self._open_create_form
+            action_text="", action_command=None
         )
         header.pack(fill="x", pady=(0, 15))
+
+        # Botões de orçamento
+        btn_frame_header = ctk.CTkFrame(header, fg_color="transparent")
+        btn_frame_header.pack(side="right")
+
+        ctk.CTkButton(
+            btn_frame_header, text="  🔧 Orçamento Instalado  ",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+            height=38, corner_radius=10,
+            command=lambda: self._open_create_form(quote_type="instalado"),
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            btn_frame_header, text="  📦 Orçamento Não Instalado  ",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=get_color("warning"), hover_color=get_color("warning_hover"),
+            height=38, corner_radius=10,
+            command=lambda: self._open_create_form(quote_type="nao_instalado"),
+        ).pack(side="left")
 
         # Pesquisa + Filtro
         filter_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -219,6 +239,17 @@ class QuotesView(ctk.CTkFrame):
         ).pack(side="left")
 
         StatusBadge(top_row, quote.get("status", "draft")).pack(side="left", padx=(10, 0))
+
+        qt = quote.get("quote_type", "instalado") or "instalado"
+        qt_text = "🔧 Instalado" if qt == "instalado" else "📦 Não Instalado"
+        qt_fg = COLORS["success_light"] if qt == "instalado" else COLORS["warning_light"]
+        qt_tc = COLORS["success"] if qt == "instalado" else COLORS["warning"]
+        ctk.CTkLabel(
+            top_row, text=f"  {qt_text}  ",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            fg_color=qt_fg, text_color=qt_tc,
+            corner_radius=4,
+        ).pack(side="left", padx=(6, 0))
 
         details = f"{format_date(quote.get('created_at', ''))}  •  {format_currency(quote.get('total', 0))}"
         if quote.get("profit") and quote["profit"] > 0:
@@ -397,7 +428,7 @@ class QuotesView(ctk.CTkFrame):
                                          corner_radius=6)
             table_header.pack(fill="x", padx=12, pady=(5, 2))
 
-            cols = [("Produto", 3), ("Dimensões", 1), ("Metros", 1), ("Preço/m", 1), ("Subtotal", 1)]
+            cols = [("Produto", 3), ("Dimensões", 1), ("Qtd", 1), ("Preço", 1), ("Subtotal", 1)]
             for text, weight in cols:
                 ctk.CTkLabel(
                     table_header, text=text,
@@ -755,18 +786,25 @@ class QuotesView(ctk.CTkFrame):
 
     # ========== Formulário de Criação/Edição ==========
 
-    def _open_create_form(self):
-        self._open_quote_form()
+    def _open_create_form(self, quote_type="instalado"):
+        self._open_quote_form(quote_type=quote_type)
 
     def _open_edit_form(self, quote_id):
         quote = db.get_quote_by_id(quote_id)
         if quote:
-            self._open_quote_form(quote)
+            self._open_quote_form(quote, quote_type=quote.get("quote_type", "instalado") or "instalado")
 
-    def _open_quote_form(self, existing_quote=None):
+    def _open_quote_form(self, existing_quote=None, quote_type="instalado"):
         """Abre formulário de orçamento em nova janela."""
+        # Determinar tipo do orçamento
+        if existing_quote:
+            quote_type = existing_quote.get("quote_type", "instalado") or "instalado"
+
+        is_installed_filter = 1 if quote_type == "instalado" else 0
+        type_label = "Instalado" if quote_type == "instalado" else "Não Instalado"
+
         dialog = ctk.CTkToplevel(self.app)
-        dialog.title("Editar Orçamento" if existing_quote else "Novo Orçamento")
+        dialog.title(("Editar Orçamento" if existing_quote else "Novo Orçamento") + f" ({type_label})")
         dialog.geometry("700x650")
         dialog.grab_set()
         dialog.transient(self.app)
@@ -848,6 +886,7 @@ class QuotesView(ctk.CTkFrame):
                     "price_per_meter": item.get("price_per_meter", 0),
                     "discount": item.get("discount", 0),
                     "total": item.get("total", 0),
+                    "pricing_unit": item.get("pricing_unit", "metro"),
                 })
 
         def refresh_items_display():
@@ -881,7 +920,9 @@ class QuotesView(ctk.CTkFrame):
                     font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["text"],
                 ).pack(side="left")
 
-                item_info = f"  {item['meters']:.2f}m × {format_currency(item['price_per_meter'])}/m"
+                item_pu = item.get('pricing_unit', 'metro')
+                item_unit = 'm' if item_pu == 'metro' else 'un'
+                item_info = f"  {item['meters']:.2f}{item_unit} × {format_currency(item['price_per_meter'])}/{item_unit}"
                 if item.get("discount", 0) > 0:
                     item_info += f" (-{format_currency(item['discount'])})"
                 item_info += f" = {format_currency(item['total'])}"
@@ -915,11 +956,15 @@ class QuotesView(ctk.CTkFrame):
         ).pack(padx=12, pady=(10, 5), anchor="w")
 
         products = db.get_all_products()
+        # Filtrar produtos por tipo instalado/não instalado
+        products = [p for p in products if p.get('is_installed', 1) == is_installed_filter]
         dobra_value = db.get_dobra_value()
         product_names = []
         for p in products:
             dims = format_dimensions(p.get('width', 0), p.get('length', 0))
-            label = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}/m"
+            pricing_unit = p.get('pricing_unit', 'metro')
+            unit_label = '/m' if pricing_unit == 'metro' else '/un'
+            label = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}{unit_label}"
             if p.get('has_dobra'):
                 label += f" [+Dobra {format_currency(dobra_value)}/m]"
             product_names.append(label)
@@ -932,20 +977,64 @@ class QuotesView(ctk.CTkFrame):
         add_inner.grid_columnconfigure(2, weight=1)
         add_inner.grid_columnconfigure(3, weight=1)
 
-        product_var = ctk.StringVar(value=product_names[0] if product_names else "")
-        if product_names:
-            prod_menu = ctk.CTkOptionMenu(
-                add_inner, values=product_names, variable=product_var,
-                font=ctk.CTkFont(size=12), height=35,
-            )
-            prod_menu.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        else:
-            ctk.CTkLabel(
-                add_inner, text="Nenhum produto cadastrado",
-                font=ctk.CTkFont(size=12), text_color=COLORS["error"],
-            ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        product_var = ctk.StringVar(value="")
 
-        ctk.CTkLabel(add_inner, text="Metros:", font=ctk.CTkFont(size=12),
+        # --- Searchable product dropdown ---
+        search_frame_prod = ctk.CTkFrame(add_inner, fg_color="transparent")
+        search_frame_prod.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+        prod_search_entry = ctk.CTkEntry(
+            search_frame_prod, height=35, font=ctk.CTkFont(size=12),
+            placeholder_text="Pesquisar produto...",
+        )
+        prod_search_entry.pack(fill="x")
+
+        # Listbox frame for suggestions
+        suggestions_frame = ctk.CTkFrame(search_frame_prod, fg_color=COLORS["card"],
+                                          corner_radius=8, border_width=1, border_color=COLORS["border"])
+        # Don't pack yet - only show when there are suggestions
+
+        suggestion_buttons = []
+
+        def update_suggestions(*args):
+            # Clear old suggestions
+            for w in suggestions_frame.winfo_children():
+                w.destroy()
+            suggestion_buttons.clear()
+
+            search_text_val = prod_search_entry.get().strip().lower()
+            if not search_text_val:
+                suggestions_frame.pack_forget()
+                return
+
+            filtered = [n for n in product_names if search_text_val in n.lower()]
+            if not filtered:
+                suggestions_frame.pack_forget()
+                return
+
+            suggestions_frame.pack(fill="x", pady=(2, 0))
+            for name in filtered[:8]:  # Max 8 suggestions
+                btn = ctk.CTkButton(
+                    suggestions_frame, text=name,
+                    font=ctk.CTkFont(size=11), height=28,
+                    fg_color="transparent", text_color=COLORS["text"],
+                    hover_color=COLORS["primary_light"],
+                    anchor="w", corner_radius=4,
+                    command=lambda n=name: select_product(n),
+                )
+                btn.pack(fill="x", padx=4, pady=1)
+                suggestion_buttons.append(btn)
+
+        def select_product(name):
+            product_var.set(name)
+            prod_search_entry.delete(0, "end")
+            prod_search_entry.insert(0, name)
+            suggestions_frame.pack_forget()
+
+        prod_search_entry.bind("<KeyRelease>", update_suggestions)
+        prod_search_entry.bind("<FocusIn>", update_suggestions)
+
+        ctk.CTkLabel(add_inner, text="Qtd (m/un):", font=ctk.CTkFont(size=12),
                      text_color=COLORS["text"]).grid(row=0, column=1, sticky="e", padx=(0, 5))
         meters_entry = ctk.CTkEntry(add_inner, width=70, height=35, font=ctk.CTkFont(size=13))
         meters_entry.grid(row=0, column=2, sticky="w", padx=(0, 8))
@@ -961,15 +1050,17 @@ class QuotesView(ctk.CTkFrame):
             sel = product_var.get()
             product = product_map.get(sel)
             if not product:
-                self.app.show_toast("Selecione um produto.", "warning")
+                self.app.show_toast("Selecione um produto da lista.", "warning")
                 return
             try:
-                meters = float(meters_entry.get() or 0)
-                if meters <= 0:
-                    self.app.show_toast("Metros deve ser maior que zero.", "warning")
+                pricing_unit = product.get('pricing_unit', 'metro')
+                qty = float(meters_entry.get() or 0)
+                if qty <= 0:
+                    unit_name = "metros" if pricing_unit == 'metro' else "quantidade"
+                    self.app.show_toast(f"{unit_name.capitalize()} deve ser maior que zero.", "warning")
                     return
             except ValueError:
-                self.app.show_toast("Valor inválido para metros.", "warning")
+                self.app.show_toast("Valor inválido.", "warning")
                 return
             
             try:
@@ -985,30 +1076,36 @@ class QuotesView(ctk.CTkFrame):
             if product.get("has_dobra"):
                 effective_price += dobra_value
             
-            subtotal = meters * effective_price
+            subtotal = qty * effective_price
             discount_amount = discount  # desconto em reais
             if discount_amount > subtotal:
                 self.app.show_toast("Desconto não pode ser maior que o subtotal.", "warning")
                 return
             total = subtotal - discount_amount
             
+            unit_label = "m" if pricing_unit == 'metro' else "un"
+            display_name = product["name"] + (" (c/ dobra)" if product.get("has_dobra") else "")
+            
             items_list.append({
                 "id": None,
                 "product_id": product["id"],
-                "product_name": product["name"] + (" (c/ dobra)" if product.get("has_dobra") else ""),
+                "product_name": display_name,
                 "measure": product["measure"],
                 "width": product.get("width", 0),
                 "length": 0,
-                "meters": meters,
+                "meters": qty,
                 "price_per_meter": effective_price,
                 "discount": discount,
                 "total": total,
+                "pricing_unit": pricing_unit,
             })
             refresh_items_display()
             meters_entry.delete(0, "end")
             meters_entry.insert(0, "1")
             discount_entry.delete(0, "end")
             discount_entry.insert(0, "0")
+            prod_search_entry.delete(0, "end")
+            product_var.set("")
 
         ctk.CTkButton(
             add_inner, text="+ Adicionar", font=ctk.CTkFont(size=12, weight="bold"),
@@ -1023,13 +1120,13 @@ class QuotesView(ctk.CTkFrame):
             
             prod_dialog = ctk.CTkToplevel(dialog)
             prod_dialog.title("Novo Produto")
-            prod_dialog.geometry("450x520")
+            prod_dialog.geometry("450x600")
             prod_dialog.grab_set()
             prod_dialog.transient(dialog)
             
             prod_dialog.update_idletasks()
             px = dialog.winfo_rootx() + (dialog.winfo_width() - 450) // 2
-            py = dialog.winfo_rooty() + (dialog.winfo_height() - 520) // 2
+            py = dialog.winfo_rooty() + (dialog.winfo_height() - 600) // 2
             prod_dialog.geometry(f"+{px}+{py}")
             
             pscroll = ctk.CTkScrollableFrame(prod_dialog, fg_color="transparent")
@@ -1064,15 +1161,32 @@ class QuotesView(ctk.CTkFrame):
             price_frame.pack(fill="x", pady=(0, 8))
             price_frame.grid_columnconfigure((0, 1), weight=1)
             
-            ctk.CTkLabel(price_frame, text="Preço por metro (R$) *", font=ctk.CTkFont(size=12, weight="bold"),
+            ctk.CTkLabel(price_frame, text="Preço (R$) *", font=ctk.CTkFont(size=12, weight="bold"),
                          text_color=COLORS["text"]).grid(row=0, column=0, sticky="w")
             np_price = ctk.CTkEntry(price_frame, height=35, font=ctk.CTkFont(size=13))
             np_price.grid(row=1, column=0, sticky="ew", padx=(0, 5))
             
-            ctk.CTkLabel(price_frame, text="Custo por metro (R$)", font=ctk.CTkFont(size=12, weight="bold"),
+            ctk.CTkLabel(price_frame, text="Custo (R$)", font=ctk.CTkFont(size=12, weight="bold"),
                          text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(5, 0))
             np_cost = ctk.CTkEntry(price_frame, height=35, font=ctk.CTkFont(size=13))
             np_cost.grid(row=1, column=1, sticky="ew", padx=(5, 0))
+
+            # Instalado e Cobrança
+            opt_frame = ctk.CTkFrame(pscroll, fg_color="transparent")
+            opt_frame.pack(fill="x", pady=(0, 8))
+            opt_frame.grid_columnconfigure((0, 1), weight=1)
+
+            ctk.CTkLabel(opt_frame, text="Instalado?", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).grid(row=0, column=0, sticky="w")
+            np_installed_var = ctk.StringVar(value=str(is_installed_filter))
+            ctk.CTkOptionMenu(opt_frame, values=["1", "0"], variable=np_installed_var,
+                              font=ctk.CTkFont(size=12), height=35).grid(row=1, column=0, sticky="ew", padx=(0, 5))
+
+            ctk.CTkLabel(opt_frame, text="Cobrança por", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(5, 0))
+            np_pricing_var = ctk.StringVar(value="metro")
+            ctk.CTkOptionMenu(opt_frame, values=["metro", "unidade"], variable=np_pricing_var,
+                              font=ctk.CTkFont(size=12), height=35).grid(row=1, column=1, sticky="ew", padx=(5, 0))
             
             # Descrição
             ctk.CTkLabel(pscroll, text="Descrição", font=ctk.CTkFont(size=12, weight="bold"),
@@ -1089,6 +1203,8 @@ class QuotesView(ctk.CTkFrame):
                     p_width = float(np_width.get() or 0)
                     p_price = float(np_price.get() or 0)
                     p_cost = float(np_cost.get() or 0)
+                    p_installed = int(np_installed_var.get())
+                    p_pricing = np_pricing_var.get()
                     if p_price <= 0 or p_width <= 0:
                         self.app.show_toast("Preço e largura devem ser maiores que zero.", "error")
                         return
@@ -1101,6 +1217,8 @@ class QuotesView(ctk.CTkFrame):
                         description=np_desc.get("1.0", "end-1c").strip(),
                         width=p_width,
                         length=0,
+                        is_installed=p_installed,
+                        pricing_unit=p_pricing,
                     )
                     self.app.show_toast("Produto criado!", "success")
                     prod_dialog.destroy()
@@ -1108,11 +1226,14 @@ class QuotesView(ctk.CTkFrame):
                     # Atualizar lista de produtos no dropdown
                     nonlocal products, product_names, product_map
                     products = db.get_all_products()
+                    products = [p for p in products if p.get('is_installed', 1) == is_installed_filter]
                     product_names.clear()
                     new_product_map = {}
                     for p in products:
                         dims = format_dimensions(p.get('width', 0), p.get('length', 0))
-                        lbl = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}/m"
+                        pu = p.get('pricing_unit', 'metro')
+                        ul = '/m' if pu == 'metro' else '/un'
+                        lbl = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}{ul}"
                         if p.get('has_dobra'):
                             lbl += f" [+Dobra {format_currency(dobra_value)}/m]"
                         product_names.append(lbl)
@@ -1120,8 +1241,9 @@ class QuotesView(ctk.CTkFrame):
                     product_map.clear()
                     product_map.update(new_product_map)
                     if product_names:
-                        prod_menu.configure(values=product_names)
                         product_var.set(product_names[-1])
+                        prod_search_entry.delete(0, "end")
+                        prod_search_entry.insert(0, product_names[-1])
                 except Exception as e:
                     self.app.show_toast(f"Erro ao criar produto: {e}", "error")
             
@@ -1334,6 +1456,7 @@ class QuotesView(ctk.CTkFrame):
                         scheduled_date=sched_entry.get_iso().strip() or None,
                         discount_total=discount_total,
                         discount_type=discount_type,
+                        quote_type=quote_type,
                     )
                     # Remover itens antigos e adicionar novos
                     old_items = existing_quote.get("items", [])
@@ -1359,7 +1482,7 @@ class QuotesView(ctk.CTkFrame):
                         scheduled_date=sched_entry.get_iso().strip() or None,
                     )
                     # Atualizar desconto total e tipo
-                    db.update_quote(quote_id, discount_total=discount_total, discount_type=discount_type)
+                    db.update_quote(quote_id, discount_total=discount_total, discount_type=discount_type, quote_type=quote_type)
                     
                     for item in items_list:
                         db.add_quote_item(
