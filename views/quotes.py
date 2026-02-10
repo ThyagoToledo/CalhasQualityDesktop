@@ -8,8 +8,10 @@ import customtkinter as ctk
 import os
 import subprocess
 from database import db
-from components.cards import COLORS, StatusBadge, create_header, create_search_bar
+from components.cards import StatusBadge, create_header, create_search_bar
+from theme import get_color, COLORS
 from components.dialogs import ConfirmDialog, format_currency, format_date, DateEntry
+from utils import format_measure, format_dimensions
 
 
 STATUS_OPTIONS = ["Todos", "Rascunho", "Enviado", "Aprovado", "Concluído"]
@@ -33,6 +35,7 @@ class QuotesView(ctk.CTkFrame):
         self.app = app
         self.search_text = ""
         self.status_filter = ""
+        self.payment_filter = ""  # "", "paid", "pending"
         self._build_list()
 
     def _build_list(self):
@@ -67,6 +70,21 @@ class QuotesView(ctk.CTkFrame):
             height=38,
         ).pack(side="right")
 
+        # Filtro de pagamento
+        pay_filter_frame = ctk.CTkFrame(self, fg_color="transparent")
+        pay_filter_frame.pack(fill="x", pady=(0, 10))
+
+        PAYMENT_FILTER_OPTIONS = ["Todos", "✅ Quitados", "💰 Devedores"]
+        self.pay_filter_var = ctk.StringVar(value="Todos")
+        ctk.CTkSegmentedButton(
+            pay_filter_frame,
+            values=PAYMENT_FILTER_OPTIONS,
+            variable=self.pay_filter_var,
+            command=self._on_payment_filter,
+            font=ctk.CTkFont(size=12),
+            height=34,
+        ).pack(side="left")
+
         # Lista
         self.list_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.list_frame.pack(fill="both", expand=True)
@@ -81,11 +99,70 @@ class QuotesView(ctk.CTkFrame):
         self.status_filter = STATUS_MAP.get(value, "")
         self._load_quotes()
 
+    def _on_payment_filter(self, value):
+        if value == "✅ Quitados":
+            self.payment_filter = "paid"
+        elif value == "💰 Devedores":
+            self.payment_filter = "pending"
+        else:
+            self.payment_filter = ""
+        self._load_quotes()
+
     def _load_quotes(self):
         for w in self.list_frame.winfo_children():
             w.destroy()
 
         quotes = db.get_all_quotes(search=self.search_text, status_filter=self.status_filter)
+        payment_summaries = db.get_all_payment_summaries()
+
+        # Filtrar por status de pagamento
+        if self.payment_filter == "paid":
+            quotes = [q for q in quotes if payment_summaries.get(q['id'], {}).get('is_paid', False)
+                      and payment_summaries.get(q['id'], {}).get('total_paid', 0) > 0]
+        elif self.payment_filter == "pending":
+            quotes = [q for q in quotes if not payment_summaries.get(q['id'], {}).get('is_paid', True)
+                      or payment_summaries.get(q['id'], {}).get('total_paid', 0) == 0]
+
+        # Contar pagos vs devedores para o resumo
+        total_paid_count = sum(1 for q in db.get_all_quotes() 
+                                if payment_summaries.get(q['id'], {}).get('is_paid', False)
+                                and payment_summaries.get(q['id'], {}).get('total_paid', 0) > 0)
+        total_pending_amount = sum(payment_summaries.get(q['id'], {}).get('balance', 0) 
+                                   for q in db.get_all_quotes())
+        total_received_amount = sum(payment_summaries.get(q['id'], {}).get('total_paid', 0)
+                                     for q in db.get_all_quotes())
+
+        # Resumo de pagamentos
+        pay_summary_frame = ctk.CTkFrame(self.list_frame, fg_color="transparent")
+        pay_summary_frame.pack(fill="x", pady=(0, 10))
+        pay_summary_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Recebido
+        recv_box = ctk.CTkFrame(pay_summary_frame, fg_color=COLORS["success_light"], corner_radius=8)
+        recv_box.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkLabel(recv_box, text="💵 Recebido", font=ctk.CTkFont(size=10),
+                     text_color=COLORS["text_secondary"]).pack(padx=8, pady=(6, 0))
+        ctk.CTkLabel(recv_box, text=format_currency(total_received_amount),
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=COLORS["success"]).pack(padx=8, pady=(0, 6))
+
+        # Devedor
+        debt_box = ctk.CTkFrame(pay_summary_frame, fg_color=COLORS["error_light"], corner_radius=8)
+        debt_box.grid(row=0, column=1, sticky="ew", padx=4)
+        ctk.CTkLabel(debt_box, text="📛 Devedor", font=ctk.CTkFont(size=10),
+                     text_color=COLORS["text_secondary"]).pack(padx=8, pady=(6, 0))
+        ctk.CTkLabel(debt_box, text=format_currency(total_pending_amount),
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=COLORS["error"]).pack(padx=8, pady=(0, 6))
+
+        # Quitados
+        paid_box = ctk.CTkFrame(pay_summary_frame, fg_color=COLORS["primary_lighter"], corner_radius=8)
+        paid_box.grid(row=0, column=2, sticky="ew", padx=(4, 0))
+        ctk.CTkLabel(paid_box, text="✅ Quitados", font=ctk.CTkFont(size=10),
+                     text_color=COLORS["text_secondary"]).pack(padx=8, pady=(6, 0))
+        ctk.CTkLabel(paid_box, text=str(total_paid_count),
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=COLORS["primary"]).pack(padx=8, pady=(0, 6))
 
         ctk.CTkLabel(
             self.list_frame,
@@ -105,9 +182,9 @@ class QuotesView(ctk.CTkFrame):
             return
 
         for quote in quotes:
-            self._create_quote_card(quote)
+            self._create_quote_card(quote, payment_summaries)
 
-    def _create_quote_card(self, quote):
+    def _create_quote_card(self, quote, payment_summaries=None):
         card = ctk.CTkFrame(
             self.list_frame,
             fg_color=COLORS["card"],
@@ -146,6 +223,15 @@ class QuotesView(ctk.CTkFrame):
         details = f"{format_date(quote.get('created_at', ''))}  •  {format_currency(quote.get('total', 0))}"
         if quote.get("profit") and quote["profit"] > 0:
             details += f"  •  Lucro: {format_currency(quote['profit'])}"
+        
+        # Adicionar info de pagamento
+        pay_summary = (payment_summaries or {}).get(quote['id'])
+        if pay_summary and pay_summary['total_paid'] > 0:
+            if pay_summary['is_paid']:
+                details += "  •  ✅ Quitado"
+            else:
+                details += f"  •  💰 Pago: {format_currency(pay_summary['total_paid'])} | Devedor: {format_currency(pay_summary['balance'])}"
+        
         ctk.CTkLabel(
             left,
             text=details,
@@ -167,7 +253,7 @@ class QuotesView(ctk.CTkFrame):
         ).pack(side="left", padx=3)
 
         status = quote.get("status", "draft")
-        if status in ("draft", "sent"):
+        if status in ("draft", "sent", "approved"):
             ctk.CTkButton(
                 right, text="✏️", font=ctk.CTkFont(size=12),
                 fg_color=COLORS["warning_light"], text_color=COLORS["warning"],
@@ -252,15 +338,15 @@ class QuotesView(ctk.CTkFrame):
 
         ctk.CTkButton(
             action_inner, text="📄 Gerar PDF", font=ctk.CTkFont(size=13),
-            fg_color=COLORS["success"], hover_color="#059669",
+            fg_color=get_color("success"), hover_color=get_color("success_hover"),
             height=36, corner_radius=8,
             command=lambda: self._generate_pdf(quote["id"]),
         ).pack(side="left", padx=5)
 
-        if status in ("draft", "sent"):
+        if status in ("draft", "sent", "approved"):
             ctk.CTkButton(
                 action_inner, text="✏️ Editar", font=ctk.CTkFont(size=13),
-                fg_color=COLORS["warning"], hover_color="#d97706",
+                fg_color=get_color("warning"), hover_color=get_color("warning_hover"),
                 height=36, corner_radius=8,
                 command=lambda: self._open_edit_form(quote["id"]),
             ).pack(side="left", padx=5)
@@ -311,7 +397,7 @@ class QuotesView(ctk.CTkFrame):
                                          corner_radius=6)
             table_header.pack(fill="x", padx=12, pady=(5, 2))
 
-            cols = [("Produto", 3), ("Medida", 1), ("Metros", 1), ("Preço/m", 1), ("Subtotal", 1)]
+            cols = [("Produto", 3), ("Dimensões", 1), ("Metros", 1), ("Preço/m", 1), ("Subtotal", 1)]
             for text, weight in cols:
                 ctk.CTkLabel(
                     table_header, text=text,
@@ -323,9 +409,14 @@ class QuotesView(ctk.CTkFrame):
                 row = ctk.CTkFrame(items_card, fg_color="transparent")
                 row.pack(fill="x", padx=12, pady=2)
 
+                product_name = item.get("product_name", "-")
+                item_discount = item.get("discount", 0)
+                if item_discount > 0:
+                    product_name += f" [-{item_discount:.1f}%]"
+                
                 vals = [
-                    (item.get("product_name", "-"), 3),
-                    (f"{item.get('measure', 0)}cm", 1),
+                    (product_name, 3),
+                    (format_dimensions(item.get('width', 0), item.get('length', 0)), 1),
                     (f"{item.get('meters', 0):.2f}m", 1),
                     (format_currency(item.get("price_per_meter", 0)), 1),
                     (format_currency(item.get("total", 0)), 1),
@@ -348,12 +439,25 @@ class QuotesView(ctk.CTkFrame):
         totals = ctk.CTkFrame(items_card, fg_color=COLORS["primary_lighter"], corner_radius=8)
         totals.pack(fill="x", padx=12, pady=10)
 
-        total_lines = [
+        # Calcular subtotal e desconto
+        subtotal = sum(item.get('total', 0) for item in items)
+        discount_total = quote.get("discount_total", 0)
+        discount_amount = subtotal * (discount_total / 100) if discount_total > 0 else 0
+        
+        total_lines = []
+        
+        # Se houver desconto total, mostrar subtotal e desconto
+        if discount_total > 0:
+            total_lines.append(("Subtotal:", format_currency(subtotal), False))
+            total_lines.append((f"Desconto ({discount_total:.1f}%):", f"- {format_currency(discount_amount)}", False))
+        
+        total_lines.extend([
             ("Total:", format_currency(quote.get("total", 0)), True),
             ("Custo:", format_currency(quote.get("cost_total", 0)), False),
             ("Lucro:", format_currency(quote.get("profit", 0)), False),
             ("Margem:", f"{quote.get('profitability', 0):.1f}%", False),
-        ]
+        ])
+        
         for label, value, bold in total_lines:
             row = ctk.CTkFrame(totals, fg_color="transparent")
             row.pack(fill="x", padx=10, pady=2)
@@ -430,6 +534,217 @@ class QuotesView(ctk.CTkFrame):
                 font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
                 anchor="w", wraplength=600, justify="left",
             ).pack(padx=15, pady=(0, 12), anchor="w")
+
+        # === SEÇÃO DE PAGAMENTOS (Saldo Devedor / Saldo Pago) ===
+        self._build_payments_section(scroll, quote)
+
+    # ========== Seção de Pagamentos ==========
+
+    def _build_payments_section(self, parent, quote):
+        """Constrói a seção de pagamentos com saldo devedor/pago."""
+        quote_id = quote["id"]
+        summary = db.get_payment_summary(quote_id)
+        payments = db.get_payments_by_quote(quote_id)
+
+        PAY_LABELS = {
+            'pix': 'Pix', 'debito': 'Débito', 'credito': 'Crédito',
+            'dinheiro': 'Dinheiro', 'transferencia': 'Transferência', 'boleto': 'Boleto',
+        }
+
+        pay_card = ctk.CTkFrame(parent, fg_color=COLORS["card"], corner_radius=10,
+                                 border_width=1, border_color=COLORS["border"])
+        pay_card.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(
+            pay_card, text="💰 Pagamentos",
+            font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["text"],
+            anchor="w",
+        ).pack(padx=15, pady=(12, 8), anchor="w")
+
+        # Resumo: Total | Pago | Saldo Devedor
+        summary_frame = ctk.CTkFrame(pay_card, fg_color="transparent")
+        summary_frame.pack(fill="x", padx=15, pady=(0, 10))
+        summary_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Total do orçamento
+        total_box = ctk.CTkFrame(summary_frame, fg_color=COLORS["primary_lighter"],
+                                  corner_radius=8)
+        total_box.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        ctk.CTkLabel(total_box, text="Total", font=ctk.CTkFont(size=11),
+                     text_color=COLORS["text_secondary"]).pack(padx=10, pady=(8, 0))
+        ctk.CTkLabel(total_box, text=format_currency(summary['total']),
+                     font=ctk.CTkFont(size=15, weight="bold"),
+                     text_color=COLORS["primary"]).pack(padx=10, pady=(0, 8))
+
+        # Valor pago
+        paid_box = ctk.CTkFrame(summary_frame, fg_color=COLORS["success_light"],
+                                 corner_radius=8)
+        paid_box.grid(row=0, column=1, sticky="ew", padx=5)
+        ctk.CTkLabel(paid_box, text="Pago", font=ctk.CTkFont(size=11),
+                     text_color=COLORS["text_secondary"]).pack(padx=10, pady=(8, 0))
+        ctk.CTkLabel(paid_box, text=format_currency(summary['total_paid']),
+                     font=ctk.CTkFont(size=15, weight="bold"),
+                     text_color=COLORS["success"]).pack(padx=10, pady=(0, 8))
+
+        # Saldo devedor
+        balance_color = COLORS["success"] if summary['is_paid'] else COLORS["error"]
+        balance_bg = COLORS["success_light"] if summary['is_paid'] else COLORS["error_light"]
+        balance_text = "Quitado" if summary['is_paid'] else "Saldo Devedor"
+
+        balance_box = ctk.CTkFrame(summary_frame, fg_color=balance_bg,
+                                    corner_radius=8)
+        balance_box.grid(row=0, column=2, sticky="ew", padx=(5, 0))
+        ctk.CTkLabel(balance_box, text=balance_text, font=ctk.CTkFont(size=11),
+                     text_color=COLORS["text_secondary"]).pack(padx=10, pady=(8, 0))
+        ctk.CTkLabel(balance_box, text=format_currency(summary['balance']),
+                     font=ctk.CTkFont(size=15, weight="bold"),
+                     text_color=balance_color).pack(padx=10, pady=(0, 8))
+
+        # Formulário para registrar pagamento
+        add_pay_frame = ctk.CTkFrame(pay_card, fg_color=COLORS["primary_lighter"],
+                                      corner_radius=8)
+        add_pay_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        ctk.CTkLabel(add_pay_frame, text="Registrar Pagamento",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=COLORS["text"]).pack(padx=12, pady=(10, 6), anchor="w")
+
+        form_inner = ctk.CTkFrame(add_pay_frame, fg_color="transparent")
+        form_inner.pack(fill="x", padx=12, pady=(0, 10))
+        form_inner.grid_columnconfigure(0, weight=1)
+        form_inner.grid_columnconfigure(1, weight=2)
+        form_inner.grid_columnconfigure(2, weight=2)
+        form_inner.grid_columnconfigure(3, weight=0)
+
+        # Valor
+        ctk.CTkLabel(form_inner, text="Valor (R$):", font=ctk.CTkFont(size=12),
+                     text_color=COLORS["text"]).grid(row=0, column=0, sticky="w", padx=(0, 5))
+        pay_amount_entry = ctk.CTkEntry(form_inner, width=100, height=35,
+                                         font=ctk.CTkFont(size=13),
+                                         placeholder_text="0.00")
+        pay_amount_entry.grid(row=1, column=0, sticky="ew", padx=(0, 8))
+
+        # Preencher com saldo restante se houver
+        if summary['balance'] > 0:
+            pay_amount_entry.insert(0, f"{summary['balance']:.2f}")
+
+        # Método de pagamento
+        pay_methods = ['pix', 'debito', 'credito', 'dinheiro', 'transferencia', 'boleto']
+        pay_method_labels = [PAY_LABELS[m] for m in pay_methods]
+        pay_method_var = ctk.StringVar(value=pay_method_labels[0])
+
+        ctk.CTkLabel(form_inner, text="Método:", font=ctk.CTkFont(size=12),
+                     text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(0, 5))
+        ctk.CTkOptionMenu(form_inner, values=pay_method_labels, variable=pay_method_var,
+                          font=ctk.CTkFont(size=12), height=35
+                          ).grid(row=1, column=1, sticky="ew", padx=(0, 8))
+
+        # Observação
+        ctk.CTkLabel(form_inner, text="Observação:", font=ctk.CTkFont(size=12),
+                     text_color=COLORS["text"]).grid(row=0, column=2, sticky="w", padx=(0, 5))
+        pay_notes_entry = ctk.CTkEntry(form_inner, height=35, font=ctk.CTkFont(size=12),
+                                        placeholder_text="Ex: Parcela 1/3")
+        pay_notes_entry.grid(row=1, column=2, sticky="ew", padx=(0, 8))
+
+        # Botão registrar
+        def register_payment():
+            try:
+                amount = float(pay_amount_entry.get() or 0)
+                if amount <= 0:
+                    self.app.show_toast("Valor deve ser maior que zero.", "warning")
+                    return
+            except ValueError:
+                self.app.show_toast("Valor inválido.", "warning")
+                return
+
+            # Converter label para key
+            method_label = pay_method_var.get()
+            method_key = method_label
+            for k, v in PAY_LABELS.items():
+                if v == method_label:
+                    method_key = k
+                    break
+
+            notes = pay_notes_entry.get().strip()
+            db.add_payment(quote_id, amount, method_key, notes)
+            self.app.show_toast(f"Pagamento de {format_currency(amount)} registrado!", "success")
+            self._show_detail(quote_id)
+
+        ctk.CTkButton(
+            form_inner, text="💵 Registrar", font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=get_color("success"), hover_color=get_color("success_hover"),
+            height=35, width=110, corner_radius=8,
+            command=register_payment,
+        ).grid(row=1, column=3)
+
+        # Lista de pagamentos registrados
+        if payments:
+            ctk.CTkLabel(pay_card, text="Histórico de Pagamentos",
+                         font=ctk.CTkFont(size=13, weight="bold"),
+                         text_color=COLORS["text"]).pack(padx=15, pady=(0, 5), anchor="w")
+
+            for pay in payments:
+                row_frame = ctk.CTkFrame(pay_card, fg_color="transparent")
+                row_frame.pack(fill="x", padx=15, pady=2)
+
+                inner = ctk.CTkFrame(row_frame, fg_color=COLORS["primary_lighter"],
+                                      corner_radius=6)
+                inner.pack(fill="x")
+                content = ctk.CTkFrame(inner, fg_color="transparent")
+                content.pack(fill="x", padx=10, pady=6)
+
+                # Valor
+                ctk.CTkLabel(
+                    content, text=format_currency(pay['amount']),
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    text_color=COLORS["success"],
+                ).pack(side="left")
+
+                # Método
+                method_display = PAY_LABELS.get(pay.get('payment_method', ''), pay.get('payment_method', ''))
+                ctk.CTkLabel(
+                    content, text=f"  via {method_display}  ",
+                    font=ctk.CTkFont(size=11),
+                    fg_color=COLORS["primary_light"],
+                    text_color=COLORS["primary"],
+                    corner_radius=4,
+                ).pack(side="left", padx=(8, 0))
+
+                # Data
+                pay_date = format_date(pay.get('payment_date', ''))
+                ctk.CTkLabel(
+                    content, text=pay_date,
+                    font=ctk.CTkFont(size=11),
+                    text_color=COLORS["text_secondary"],
+                ).pack(side="left", padx=(8, 0))
+
+                # Observação
+                if pay.get('notes'):
+                    ctk.CTkLabel(
+                        content, text=f"({pay['notes']})",
+                        font=ctk.CTkFont(size=10),
+                        text_color=COLORS["text_secondary"],
+                    ).pack(side="left", padx=(8, 0))
+
+                # Botão remover
+                ctk.CTkButton(
+                    content, text="✕", width=28, height=28,
+                    fg_color=COLORS["error_light"], text_color=COLORS["error"],
+                    hover_color=COLORS["error_hover_light"], corner_radius=6,
+                    command=lambda pid=pay['id']: self._remove_payment(quote_id, pid),
+                ).pack(side="right")
+
+        ctk.CTkFrame(pay_card, height=8, fg_color="transparent").pack()
+
+    def _remove_payment(self, quote_id, payment_id):
+        """Remove um pagamento com confirmação."""
+        ConfirmDialog(
+            self.app, "Remover Pagamento",
+            "Tem certeza que deseja remover este pagamento?",
+            lambda: (db.delete_payment(payment_id),
+                     self.app.show_toast("Pagamento removido.", "success"),
+                     self._show_detail(quote_id)),
+        )
 
     # ========== Formulário de Criação/Edição ==========
 
@@ -520,15 +835,24 @@ class QuotesView(ctk.CTkFrame):
                     "product_id": item.get("product_id"),
                     "product_name": item.get("product_name", ""),
                     "measure": item.get("measure", 0),
+                    "width": item.get("width", 0),
+                    "length": item.get("length", 0),
                     "meters": item.get("meters", 0),
                     "price_per_meter": item.get("price_per_meter", 0),
+                    "discount": item.get("discount", 0),
                     "total": item.get("total", 0),
                 })
 
         def refresh_items_display():
             for w in items_container.winfo_children():
                 w.destroy()
-            total = sum(it["total"] for it in items_list)
+            subtotal = sum(it["total"] for it in items_list)
+            try:
+                discount_total = float(discount_total_entry.get() or 0) if 'discount_total_entry' in locals() else 0
+            except:
+                discount_total = 0
+            discount_amount = subtotal * (discount_total / 100)
+            total = subtotal - discount_amount
             total_var.set(format_currency(total))
 
             for idx, item in enumerate(items_list):
@@ -543,8 +867,13 @@ class QuotesView(ctk.CTkFrame):
                     font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["text"],
                 ).pack(side="left")
 
+                item_info = f"  {item['meters']:.2f}m × {format_currency(item['price_per_meter'])}/m"
+                if item.get("discount", 0) > 0:
+                    item_info += f" (-{item['discount']:.1f}%)"
+                item_info += f" = {format_currency(item['total'])}"
+                
                 ctk.CTkLabel(
-                    inner, text=f"  {item['meters']:.2f}m × {format_currency(item['price_per_meter'])}/m = {format_currency(item['total'])}",
+                    inner, text=item_info,
                     font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
                 ).pack(side="left", padx=8)
 
@@ -575,7 +904,8 @@ class QuotesView(ctk.CTkFrame):
         dobra_value = db.get_dobra_value()
         product_names = []
         for p in products:
-            label = f"{p['name']} ({p['type']}, {p['measure']}cm) - {format_currency(p['price_per_meter'])}/m"
+            dims = format_dimensions(p.get('width', 0), p.get('length', 0))
+            label = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}/m"
             if p.get('has_dobra'):
                 label += f" [+Dobra {format_currency(dobra_value)}/m]"
             product_names.append(label)
@@ -586,6 +916,7 @@ class QuotesView(ctk.CTkFrame):
         add_inner.grid_columnconfigure(0, weight=3)
         add_inner.grid_columnconfigure(1, weight=1)
         add_inner.grid_columnconfigure(2, weight=1)
+        add_inner.grid_columnconfigure(3, weight=1)
 
         product_var = ctk.StringVar(value=product_names[0] if product_names else "")
         if product_names:
@@ -602,9 +933,15 @@ class QuotesView(ctk.CTkFrame):
 
         ctk.CTkLabel(add_inner, text="Metros:", font=ctk.CTkFont(size=12),
                      text_color=COLORS["text"]).grid(row=0, column=1, sticky="e", padx=(0, 5))
-        meters_entry = ctk.CTkEntry(add_inner, width=80, height=35, font=ctk.CTkFont(size=13))
+        meters_entry = ctk.CTkEntry(add_inner, width=70, height=35, font=ctk.CTkFont(size=13))
         meters_entry.grid(row=0, column=2, sticky="w", padx=(0, 8))
         meters_entry.insert(0, "1")
+
+        ctk.CTkLabel(add_inner, text="Desc%:", font=ctk.CTkFont(size=12),
+                     text_color=COLORS["text"]).grid(row=0, column=3, sticky="e", padx=(0, 5))
+        discount_entry = ctk.CTkEntry(add_inner, width=60, height=35, font=ctk.CTkFont(size=13))
+        discount_entry.grid(row=0, column=4, sticky="w", padx=(0, 8))
+        discount_entry.insert(0, "0")
 
         def add_item():
             sel = product_var.get()
@@ -620,31 +957,183 @@ class QuotesView(ctk.CTkFrame):
             except ValueError:
                 self.app.show_toast("Valor inválido para metros.", "warning")
                 return
+            
+            try:
+                discount = float(discount_entry.get() or 0)
+                if discount < 0 or discount > 100:
+                    self.app.show_toast("Desconto deve estar entre 0 e 100%.", "warning")
+                    return
+            except ValueError:
+                self.app.show_toast("Valor inválido para desconto.", "warning")
+                return
 
-            total = meters * product["price_per_meter"]
             effective_price = product["price_per_meter"]
             if product.get("has_dobra"):
                 effective_price += dobra_value
-                total = meters * effective_price
+            
+            subtotal = meters * effective_price
+            discount_amount = subtotal * (discount / 100)
+            total = subtotal - discount_amount
+            
             items_list.append({
                 "id": None,
                 "product_id": product["id"],
                 "product_name": product["name"] + (" (c/ dobra)" if product.get("has_dobra") else ""),
                 "measure": product["measure"],
+                "width": product.get("width", 0),
+                "length": product.get("length", 0),
                 "meters": meters,
                 "price_per_meter": effective_price,
+                "discount": discount,
                 "total": total,
             })
             refresh_items_display()
             meters_entry.delete(0, "end")
             meters_entry.insert(0, "1")
+            discount_entry.delete(0, "end")
+            discount_entry.insert(0, "0")
 
         ctk.CTkButton(
             add_inner, text="+ Adicionar", font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=35, width=100, corner_radius=8,
             command=add_item,
-        ).grid(row=0, column=3, padx=(8, 0))
+        ).grid(row=0, column=5, padx=(8, 0))
+
+        def open_new_product_dialog():
+            """Abre dialog para criar produto rápido dentro do orçamento."""
+            from views.products import _get_product_types_map
+            
+            prod_dialog = ctk.CTkToplevel(dialog)
+            prod_dialog.title("Novo Produto")
+            prod_dialog.geometry("450x520")
+            prod_dialog.grab_set()
+            prod_dialog.transient(dialog)
+            
+            prod_dialog.update_idletasks()
+            px = dialog.winfo_rootx() + (dialog.winfo_width() - 450) // 2
+            py = dialog.winfo_rooty() + (dialog.winfo_height() - 520) // 2
+            prod_dialog.geometry(f"+{px}+{py}")
+            
+            pscroll = ctk.CTkScrollableFrame(prod_dialog, fg_color="transparent")
+            pscroll.pack(fill="both", expand=True, padx=20, pady=10)
+            
+            ctk.CTkLabel(pscroll, text="Novo Produto", font=ctk.CTkFont(size=18, weight="bold"),
+                         text_color=COLORS["text"]).pack(anchor="w", pady=(0, 12))
+            
+            # Nome
+            ctk.CTkLabel(pscroll, text="Nome do Produto *", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).pack(anchor="w")
+            np_name = ctk.CTkEntry(pscroll, height=35, font=ctk.CTkFont(size=13))
+            np_name.pack(fill="x", pady=(2, 8))
+            
+            # Tipo
+            types_map = _get_product_types_map()
+            type_keys = list(types_map.keys())
+            ctk.CTkLabel(pscroll, text="Tipo *", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).pack(anchor="w")
+            np_type_var = ctk.StringVar(value=type_keys[0] if type_keys else "calha")
+            ctk.CTkOptionMenu(pscroll, values=type_keys, variable=np_type_var,
+                              font=ctk.CTkFont(size=12), height=35).pack(fill="x", pady=(2, 8))
+            
+            # Largura e Comprimento
+            dims_frame = ctk.CTkFrame(pscroll, fg_color="transparent")
+            dims_frame.pack(fill="x", pady=(0, 8))
+            dims_frame.grid_columnconfigure((0, 1), weight=1)
+            
+            ctk.CTkLabel(dims_frame, text="Largura (cm) *", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).grid(row=0, column=0, sticky="w")
+            np_width = ctk.CTkEntry(dims_frame, height=35, font=ctk.CTkFont(size=13))
+            np_width.grid(row=1, column=0, sticky="ew", padx=(0, 5))
+            
+            ctk.CTkLabel(dims_frame, text="Comprimento (cm)", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(5, 0))
+            np_length = ctk.CTkEntry(dims_frame, height=35, font=ctk.CTkFont(size=13))
+            np_length.grid(row=1, column=1, sticky="ew", padx=(5, 0))
+            
+            # Preço e Custo
+            price_frame = ctk.CTkFrame(pscroll, fg_color="transparent")
+            price_frame.pack(fill="x", pady=(0, 8))
+            price_frame.grid_columnconfigure((0, 1), weight=1)
+            
+            ctk.CTkLabel(price_frame, text="Preço por metro (R$) *", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).grid(row=0, column=0, sticky="w")
+            np_price = ctk.CTkEntry(price_frame, height=35, font=ctk.CTkFont(size=13))
+            np_price.grid(row=1, column=0, sticky="ew", padx=(0, 5))
+            
+            ctk.CTkLabel(price_frame, text="Custo por metro (R$)", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(5, 0))
+            np_cost = ctk.CTkEntry(price_frame, height=35, font=ctk.CTkFont(size=13))
+            np_cost.grid(row=1, column=1, sticky="ew", padx=(5, 0))
+            
+            # Descrição
+            ctk.CTkLabel(pscroll, text="Descrição", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).pack(anchor="w")
+            np_desc = ctk.CTkTextbox(pscroll, height=50, font=ctk.CTkFont(size=12))
+            np_desc.pack(fill="x", pady=(2, 12))
+            
+            def save_new_product():
+                name = np_name.get().strip()
+                if not name:
+                    self.app.show_toast("Nome do produto é obrigatório.", "error")
+                    return
+                try:
+                    p_width = float(np_width.get() or 0)
+                    p_length = float(np_length.get() or 0)
+                    p_price = float(np_price.get() or 0)
+                    p_cost = float(np_cost.get() or 0)
+                    if p_price <= 0 or p_width <= 0:
+                        self.app.show_toast("Preço e largura devem ser maiores que zero.", "error")
+                        return
+                    db.create_product(
+                        name=name,
+                        type=np_type_var.get(),
+                        measure=p_width,
+                        price_per_meter=p_price,
+                        cost=p_cost,
+                        description=np_desc.get("1.0", "end-1c").strip(),
+                        width=p_width,
+                        length=p_length,
+                    )
+                    self.app.show_toast("Produto criado!", "success")
+                    prod_dialog.destroy()
+                    
+                    # Atualizar lista de produtos no dropdown
+                    nonlocal products, product_names, product_map
+                    products = db.get_all_products()
+                    product_names.clear()
+                    new_product_map = {}
+                    for p in products:
+                        dims = format_dimensions(p.get('width', 0), p.get('length', 0))
+                        lbl = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}/m"
+                        if p.get('has_dobra'):
+                            lbl += f" [+Dobra {format_currency(dobra_value)}/m]"
+                        product_names.append(lbl)
+                        new_product_map[lbl] = p
+                    product_map.clear()
+                    product_map.update(new_product_map)
+                    if product_names:
+                        prod_menu.configure(values=product_names)
+                        product_var.set(product_names[-1])
+                except Exception as e:
+                    self.app.show_toast(f"Erro ao criar produto: {e}", "error")
+            
+            btn_f = ctk.CTkFrame(pscroll, fg_color="transparent")
+            btn_f.pack(fill="x")
+            ctk.CTkButton(btn_f, text="Cancelar", fg_color=get_color("border"),
+                          text_color=get_color("text"), hover_color=get_color("border_hover"),
+                          height=36, command=prod_dialog.destroy).pack(side="left")
+            ctk.CTkButton(btn_f, text="💾 Salvar Produto", fg_color=get_color("primary"),
+                          hover_color=get_color("primary_hover"), height=36,
+                          font=ctk.CTkFont(size=13, weight="bold"),
+                          command=save_new_product).pack(side="right")
+
+        ctk.CTkButton(
+            add_inner, text="🆕 Novo Produto", font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=get_color("warning"), hover_color=get_color("warning_hover"),
+            height=35, width=120, corner_radius=8,
+            command=open_new_product_dialog,
+        ).grid(row=0, column=6, padx=(5, 0))
 
         # Notas e termos
         ctk.CTkLabel(scroll, text="Notas Técnicas", font=ctk.CTkFont(size=12, weight="bold"),
@@ -698,12 +1187,51 @@ class QuotesView(ctk.CTkFrame):
                 checkbox_height=22, checkbox_width=22,
                 corner_radius=6,
                 border_width=2,
-                fg_color=COLORS["primary"],
-                hover_color="#1d4ed8",
-                text_color=COLORS["text"],
+                fg_color=get_color("primary"),
+                hover_color=get_color("primary_hover"),
+                text_color=get_color("text"),
             ).grid(row=idx // 3, column=idx % 3, sticky="w", padx=(0, 25), pady=4)
 
         payment_inner.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Desconto Total
+        discount_total_frame = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=10,
+                                             border_width=1, border_color=COLORS["border"])
+        discount_total_frame.pack(fill="x", pady=(10, 5))
+
+        discount_inner = ctk.CTkFrame(discount_total_frame, fg_color="transparent")
+        discount_inner.pack(fill="x", padx=12, pady=10)
+        
+        ctk.CTkLabel(
+            discount_inner, text="Desconto Total (%):",
+            font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+        ).pack(side="left")
+
+        discount_total_entry = ctk.CTkEntry(
+            discount_inner, width=100, height=35, font=ctk.CTkFont(size=14)
+        )
+        discount_total_entry.pack(side="left", padx=10)
+        discount_total_entry.insert(0, str(existing_quote.get("discount_total", 0) if existing_quote else 0))
+        
+        def update_total_with_discount():
+            try:
+                disc = float(discount_total_entry.get() or 0)
+                if disc < 0 or disc > 100:
+                    self.app.show_toast("Desconto total deve estar entre 0 e 100%.", "warning")
+                    return
+                subtotal = sum(it["total"] for it in items_list)
+                discount_amount = subtotal * (disc / 100)
+                total = subtotal - discount_amount
+                total_var.set(format_currency(total))
+            except ValueError:
+                pass
+        
+        ctk.CTkButton(
+            discount_inner, text="Aplicar", font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=get_color("success"), hover_color=get_color("success_hover"),
+            height=35, width=80, corner_radius=8,
+            command=update_total_with_discount,
+        ).pack(side="left")
 
         # Total
         total_frame = ctk.CTkFrame(scroll, fg_color=COLORS["primary_lighter"], corner_radius=10)
@@ -724,8 +1252,8 @@ class QuotesView(ctk.CTkFrame):
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", font=ctk.CTkFont(size=13),
-            fg_color="#e2e8f0", text_color=COLORS["text"],
-            hover_color="#cbd5e1", width=120, height=38,
+            fg_color=get_color("border"), text_color=get_color("text"),
+            hover_color=get_color("border_hover"), width=120, height=38,
             command=dialog.destroy,
         ).pack(side="left")
 
@@ -744,6 +1272,15 @@ class QuotesView(ctk.CTkFrame):
             )
 
             try:
+                discount_total = float(discount_total_entry.get() or 0)
+                if discount_total < 0 or discount_total > 100:
+                    self.app.show_toast("Desconto total deve estar entre 0 e 100%.", "error")
+                    return
+            except ValueError:
+                self.app.show_toast("Valor inválido para desconto total.", "error")
+                return
+            
+            try:
                 if existing_quote:
                     # Editar
                     db.update_quote(
@@ -755,6 +1292,7 @@ class QuotesView(ctk.CTkFrame):
                         contract_terms=terms_text.get("1.0", "end-1c").strip(),
                         payment_methods=selected_payments,
                         scheduled_date=sched_entry.get_iso().strip() or None,
+                        discount_total=discount_total,
                     )
                     # Remover itens antigos e adicionar novos
                     old_items = existing_quote.get("items", [])
@@ -765,6 +1303,7 @@ class QuotesView(ctk.CTkFrame):
                             existing_quote["id"],
                             item["product_id"],
                             item["meters"],
+                            discount=item.get("discount", 0),
                         )
                     self.app.show_toast("Orçamento atualizado!", "success")
                 else:
@@ -778,11 +1317,15 @@ class QuotesView(ctk.CTkFrame):
                         payment_methods=selected_payments,
                         scheduled_date=sched_entry.get_iso().strip() or None,
                     )
+                    # Atualizar desconto total
+                    db.update_quote(quote_id, discount_total=discount_total)
+                    
                     for item in items_list:
                         db.add_quote_item(
                             quote_id,
                             item["product_id"],
                             item["meters"],
+                            discount=item.get("discount", 0),
                         )
                     self.app.show_toast("Orçamento criado com sucesso!", "success")
 
@@ -793,7 +1336,7 @@ class QuotesView(ctk.CTkFrame):
 
         ctk.CTkButton(
             btn_frame, text="💾 Salvar Orçamento", font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             width=180, height=38, corner_radius=10,
             command=save_quote,
         ).pack(side="right")

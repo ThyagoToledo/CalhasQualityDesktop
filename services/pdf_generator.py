@@ -13,6 +13,7 @@ import unittest.mock  # noqa: F401
 from fpdf import FPDF  # type: ignore[import-untyped]
 from datetime import datetime
 import os
+from utils import format_measure, format_dimensions
 from typing import Any, Optional
 
 
@@ -159,7 +160,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         pdf.cell(content_width, 5, phone, align='C', new_x='LMARGIN', new_y='NEXT')
         y_pos += 5
 
-    y_pos += 5
+    y_pos += 3
 
     # ==============================
     # 4. TITULO DO ORCAMENTO
@@ -206,7 +207,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     pdf.set_text_color(*TEXT_SECONDARY)
     pdf.set_xy(margin, y_pos)
     pdf.cell(content_width, 5, f"[OR.{quote_id:04d}]", align='C', new_x='LMARGIN', new_y='NEXT')
-    y_pos += 8
+    y_pos += 5
 
     # ==============================
     # 5. DESCRICAO DAS ATIVIDADES
@@ -220,7 +221,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
         pdf.cell(content_width, 8, "Descricao das atividades", new_x='LMARGIN', new_y='NEXT')
-        y_pos += 10
+        y_pos += 9
 
         pdf.set_font('Helvetica', '', 10)
         pdf.set_text_color(*TEXT_SECONDARY)
@@ -233,13 +234,13 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     # ==============================
     pdf.set_draw_color(*BORDER_COLOR)
     pdf.line(margin, y_pos, page_width - margin, y_pos)
-    y_pos += 5
+    y_pos += 4
 
-    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_font('Helvetica', 'B', 12)
     pdf.set_text_color(*TEXT_DARK)
     pdf.set_xy(margin, y_pos)
     pdf.cell(content_width, 7, "Precos", new_x='LMARGIN', new_y='NEXT')
-    y_pos += 8
+    y_pos += 7
 
     if items:
         col_product = content_width * 0.35
@@ -262,6 +263,9 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             price_per_meter = item.get('price_per_meter', 0)
             item_total = item.get('total', 0)
             measure = item.get('measure', 0)
+            item_discount = item.get('discount', 0)
+            item_width = item.get('width', 0)
+            item_length = item.get('length', 0)
 
             row_y = y_pos
 
@@ -270,8 +274,12 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             pdf.set_text_color(*TEXT_DARK)
             pdf.set_xy(margin, row_y)
             product_display = f"{product_name}"
-            if measure:
-                product_display += f" ({int(measure)}cm)"
+            if item_width or item_length:
+                product_display += f" ({format_dimensions(item_width, item_length)})"
+            elif measure:
+                product_display += f" ({format_measure(measure)})"
+            if item_discount > 0:
+                product_display += f" [-{item_discount:.1f}%]"
             pdf.cell(col_product, 7, product_display)
 
             # Quantidade
@@ -297,7 +305,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             pdf.set_xy(badge_x, row_y)
             pdf.cell(badge_w, badge_h, _fmt_currency(item_total), align='C')
 
-            y_pos += 12
+            y_pos += 10
 
         # Linha pontilhada
         y_pos += 2
@@ -309,6 +317,31 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             dash_x += 6
         y_pos += 5
 
+        # Calcular subtotal (soma dos itens) e desconto total
+        subtotal = sum(item.get('total', 0) for item in items)
+        discount_total_percent = quote.get('discount_total', 0)
+        discount_total_amount = subtotal * (discount_total_percent / 100) if discount_total_percent > 0 else 0
+        final_total = quote.get('total', 0)
+
+        # Mostrar Subtotal se houver desconto total
+        if discount_total_percent > 0:
+            pdf.set_font('Helvetica', '', 11)
+            pdf.set_text_color(*TEXT_DARK)
+            pdf.set_xy(margin, y_pos)
+            pdf.cell(content_width * 0.5, 7, "Subtotal")
+            pdf.set_xy(margin + content_width * 0.5, y_pos)
+            pdf.cell(content_width * 0.5, 7, _fmt_currency(subtotal), align='R')
+            y_pos += 8
+
+            # Mostrar Desconto Total
+            pdf.set_font('Helvetica', '', 11)
+            pdf.set_text_color(*TEXT_SECONDARY)
+            pdf.set_xy(margin, y_pos)
+            pdf.cell(content_width * 0.5, 7, f"Desconto Total ({discount_total_percent:.1f}%)")
+            pdf.set_xy(margin + content_width * 0.5, y_pos)
+            pdf.cell(content_width * 0.5, 7, f"- {_fmt_currency(discount_total_amount)}", align='R')
+            y_pos += 8
+
         # TOTAL
         pdf.set_font('Helvetica', 'B', 11)
         pdf.set_text_color(*TEXT_DARK)
@@ -318,8 +351,46 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         pdf.set_font('Helvetica', 'B', 13)
         pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin + content_width * 0.5, y_pos)
-        pdf.cell(content_width * 0.5, 8, _fmt_currency(quote.get('total', 0)), align='R')
-        y_pos += 14
+        pdf.cell(content_width * 0.5, 8, _fmt_currency(final_total), align='R')
+        y_pos += 10
+
+    # ==============================
+    # 6.5 SALDO DEVEDOR / PAGO
+    # ==============================
+    from database import db as _db
+    pay_summary = _db.get_payment_summary(quote.get('id', 0))
+    if pay_summary and pay_summary['total_paid'] > 0:
+        pdf.set_draw_color(*BORDER_COLOR)
+        pdf.line(margin, y_pos, page_width - margin, y_pos)
+        y_pos += 5
+
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(*TEXT_DARK)
+        pdf.set_xy(margin, y_pos)
+        pdf.cell(content_width, 7, "Situacao Financeira")
+        y_pos += 8
+
+        # Valor Pago
+        pdf.set_font('Helvetica', '', 10)
+        pdf.set_text_color(34, 197, 94)  # green
+        pdf.set_xy(margin, y_pos)
+        pdf.cell(content_width * 0.5, 7, "Valor Pago")
+        pdf.set_xy(margin + content_width * 0.5, y_pos)
+        pdf.cell(content_width * 0.5, 7, _fmt_currency(pay_summary['total_paid']), align='R')
+        y_pos += 7
+
+        # Saldo Devedor
+        if pay_summary['balance'] > 0:
+            pdf.set_text_color(239, 68, 68)  # red
+            pdf.set_xy(margin, y_pos)
+            pdf.cell(content_width * 0.5, 7, "Saldo Devedor")
+            pdf.set_xy(margin + content_width * 0.5, y_pos)
+            pdf.cell(content_width * 0.5, 7, _fmt_currency(pay_summary['balance']), align='R')
+        else:
+            pdf.set_text_color(34, 197, 94)  # green
+            pdf.set_xy(margin, y_pos)
+            pdf.cell(content_width * 0.5, 7, "Status: QUITADO")
+        y_pos += 8
 
     # ==============================
     # 7. METODOS DE PAGAMENTO
@@ -329,18 +400,16 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     payment_methods_str = quote.get('payment_methods', '')
     if payment_methods_str:
         methods = [m.strip() for m in payment_methods_str.split(',') if m.strip()]
-        num_badge_rows = (len(methods) + 2) // 3
-        _ = 20 + num_badge_rows * 13  # section_h estimate
 
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
-        y_pos += 8
+        y_pos += 5
 
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font('Helvetica', 'B', 12)
         pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
-        pdf.cell(content_width, 8, "Metodos de pagamento", new_x='LMARGIN', new_y='NEXT')
-        y_pos += 12
+        pdf.cell(content_width, 7, "Metodos de pagamento", new_x='LMARGIN', new_y='NEXT')
+        y_pos += 9
 
         # Bootstrap Icons SVG mapping
         icons_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon", "payment")
@@ -362,10 +431,10 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             'boleto': 'boleto',
         }
 
-        icon_size = 5  # mm for SVG icon
-        cols = 3  # 3 badges per row
+        icon_size = 4  # mm for SVG icon
+        cols = 4  # 4 badges per row
         col_width = content_width / cols
-        badge_h = 9
+        badge_h = 7
 
         for idx, method in enumerate(methods):
             label = method_labels.get(method, method)
@@ -375,13 +444,13 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
             col = idx % cols
             if col == 0 and idx > 0:
-                y_pos += badge_h + 4
+                y_pos += badge_h + 2
 
             badge_x = margin + col * col_width
 
-            pdf.set_font('Helvetica', '', 9)
-            label_w = pdf.get_string_width(f" {label}") + 4
-            badge_total_w = (icon_size + 6) + label_w + 6 if has_icon else label_w + 10
+            pdf.set_font('Helvetica', '', 8)
+            label_w = pdf.get_string_width(f" {label}") + 3
+            badge_total_w = (icon_size + 5) + label_w + 4 if has_icon else label_w + 8
 
             # Borda externa do badge
             pdf.set_draw_color(*BORDER_COLOR)
@@ -390,11 +459,11 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
             if has_icon:
                 # Icon box background
-                icon_box_x = badge_x + 2
-                icon_box_w = icon_size + 4
+                icon_box_x = badge_x + 1.5
+                icon_box_w = icon_size + 3
                 pdf.set_fill_color(*BG_LIGHT)
                 pdf.set_draw_color(*BORDER_COLOR)
-                pdf.rect(icon_box_x, y_pos + 1.5, icon_box_w, 6, 'FD')
+                pdf.rect(icon_box_x, y_pos + 1, icon_box_w, badge_h - 2, 'FD')
 
                 # Render SVG icon
                 icon_x = icon_box_x + (icon_box_w - icon_size) / 2
@@ -405,17 +474,17 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
                     pass
 
                 # Label after icon
-                pdf.set_font('Helvetica', '', 9)
+                pdf.set_font('Helvetica', '', 8)
                 pdf.set_text_color(*TEXT_DARK)
-                pdf.set_xy(icon_box_x + icon_box_w + 2, y_pos)
+                pdf.set_xy(icon_box_x + icon_box_w + 1, y_pos)
                 pdf.cell(label_w, badge_h, label or '')
             else:
-                pdf.set_font('Helvetica', '', 9)
+                pdf.set_font('Helvetica', '', 8)
                 pdf.set_text_color(*TEXT_DARK)
-                pdf.set_xy(badge_x + 4, y_pos)
-                pdf.cell(badge_total_w - 8, badge_h, label or '')
+                pdf.set_xy(badge_x + 3, y_pos)
+                pdf.cell(badge_total_w - 6, badge_h, label or '')
 
-        y_pos += badge_h + 10
+        y_pos += badge_h + 5
 
     # ==============================
     # 8. CONDICOES DE CONTRATO
@@ -429,27 +498,37 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
         pdf.set_draw_color(*BORDER_COLOR)
         pdf.line(margin, y_pos, page_width - margin, y_pos)
-        y_pos += 8
+        y_pos += 5
 
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font('Helvetica', 'B', 12)
         pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
-        pdf.cell(content_width, 8, "Condicoes de contrato", new_x='LMARGIN', new_y='NEXT')
-        y_pos += 10
+        pdf.cell(content_width, 7, "Condicoes de contrato", new_x='LMARGIN', new_y='NEXT')
+        y_pos += 8
 
-        pdf.set_font('Helvetica', '', 10)
+        pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
         pdf.multi_cell(content_width, 5, contract)
-        y_pos = pdf.get_y() + 5
+        y_pos = pdf.get_y() + 3
 
     # ==============================
-    # 9. ASSINATURAS
+    # 9. ASSINATURAS + DATA + LINK (bloco unico)
     # ==============================
-    # Tudo em uma unica pagina
+    # Calcular espaco total necessario para o bloco final
+    block_height = 40  # espaco para assinaturas + data + link
+    page_bottom = 297 - 10  # limite inferior da pagina A4
+    
+    # Se nao cabe na pagina atual, adicionar nova pagina
+    if y_pos + block_height > page_bottom:
+        pdf.add_page()
+        y_pos = 30
 
-    # Posicionar assinaturas logo abaixo do conteudo, com espaco para assinar
-    sig_y = y_pos + 25
+    # Desabilitar auto page break temporariamente para nao quebrar o bloco
+    pdf.set_auto_page_break(auto=False)
+
+    # Posicionar assinaturas com espaco reduzido
+    sig_y = y_pos + 10
     half_width = (content_width - 30) / 2
 
     # Linha assinatura empresa
@@ -476,7 +555,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     # ==============================
     # 10. DATA POR EXTENSO
     # ==============================
-    date_y = line_y + 16
+    date_y = line_y + 12
     created_at = quote.get('created_at', '')
     date_text = _fmt_date_extenso(created_at[:10] if created_at else None)
 
@@ -488,7 +567,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     # ==============================
     # 11. LINK ASSINAR DOCUMENTO
     # ==============================
-    sign_y = date_y + 10
+    sign_y = date_y + 6
     pdf.set_font('Helvetica', 'B', 10)
     pdf.set_text_color(*BLUE_PRIMARY)
     sign_text = 'Assinar documento'
@@ -502,6 +581,9 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
     pdf.set_line_width(0.3)
     pdf.line(sign_x, sign_y + 6, sign_x + text_w, sign_y + 6)
     pdf.set_line_width(0.2)
+
+    # Restaurar auto page break
+    pdf.set_auto_page_break(auto=True, margin=25)
 
     # ==============================
     # SALVAR PDF

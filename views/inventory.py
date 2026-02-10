@@ -6,7 +6,8 @@ Controle de materiais com alertas de estoque baixo.
 
 import customtkinter as ctk
 from database import db
-from components.cards import COLORS, create_header, create_search_bar
+from components.cards import create_header, create_search_bar
+from theme import get_color, COLORS
 from components.dialogs import ConfirmDialog, FormDialog
 
 
@@ -251,7 +252,7 @@ class InventoryView(ctk.CTkFrame):
 
         ctk.CTkButton(
             dialog, text="Confirmar", font=ctk.CTkFont(size=13),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=36, command=confirm,
         ).pack(padx=20, pady=15, fill="x")
 

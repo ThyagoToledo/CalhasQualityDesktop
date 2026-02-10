@@ -14,38 +14,7 @@ ROOT_DIR = Path(__file__).parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from database import db
-
-# ============== Constantes de Cores ==============
-COLORS = {
-    "primary": "#2563eb",
-    "primary_hover": "#1d4ed8",
-    "primary_light": "#dbeafe",
-    "success": "#10b981",
-    "success_light": "#d1fae5",
-    "warning": "#f59e0b",
-    "warning_light": "#fef3c7",
-    "error": "#ef4444",
-    "error_light": "#fee2e2",
-    "bg": "#f0f2f5",
-    "card": "#ffffff",
-    "text": "#1e293b",
-    "text_secondary": "#64748b",
-    "border": "#e2e8f0",
-    "sidebar_bg": "#1e293b",
-    "sidebar_text": "#94a3b8",
-    "sidebar_active": "#2563eb",
-    "sidebar_hover": "#334155",
-}
-
-STATUS_COLORS = {
-    "draft": ("#9ca3af", "Rascunho"),
-    "sent": ("#3b82f6", "Enviado"),
-    "approved": ("#22c55e", "Aprovado"),
-    "completed": ("#a855f7", "Concluído"),
-    "pending": ("#f59e0b", "Pendente"),
-    "in-progress": ("#3b82f6", "Em Progresso"),
-    "cancelled": ("#ef4444", "Cancelado"),
-}
+from theme import ThemeManager, get_color, get_colors
 
 
 class CalhaGestApp(ctk.CTk):
@@ -64,9 +33,10 @@ class CalhaGestApp(ctk.CTk):
 
         # Tema
         self.current_theme = "light"
+        ThemeManager.set_theme("light")
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("blue")
-        self.configure(fg_color=COLORS["bg"])
+        self.configure(fg_color=get_color("bg"))
 
         # Estado
         self.current_view_name = None
@@ -149,16 +119,23 @@ class CalhaGestApp(ctk.CTk):
 
     def toggle_theme(self):
         """Alterna entre tema claro e escuro."""
-        if self.current_theme == "light":
-            self.current_theme = "dark"
-            ctk.set_appearance_mode("dark")
+        new_theme = ThemeManager.toggle_theme()
+        self.current_theme = new_theme
+        
+        # Definir o appearance mode do CustomTkinter
+        appearance_mode = "dark" if new_theme == "dark" else "light"
+        ctk.set_appearance_mode(appearance_mode)
+        
+        # Atualizar fundo da janela
+        self.configure(fg_color=get_color("bg"))
+        
+        # Exibir notificação
+        if new_theme == "dark":
             self.show_toast("Tema escuro ativado 🌙", "info")
         else:
-            self.current_theme = "light"
-            ctk.set_appearance_mode("light")
             self.show_toast("Tema claro ativado ☀️", "info")
         
-        # Recarregar view atual para atualizar ícones e cores
+        # Recarregar view atual para atualizar cores
         current = self.current_view_name
         self.current_view_name = None
         self.show_view(current)
@@ -166,12 +143,12 @@ class CalhaGestApp(ctk.CTk):
     def show_toast(self, message, type_="info"):
         """Exibe uma notificação temporária no topo."""
         colors = {
-            "info": COLORS["primary"],
-            "success": COLORS["success"],
-            "warning": COLORS["warning"],
-            "error": COLORS["error"],
+            "info": get_color("primary"),
+            "success": get_color("success"),
+            "warning": get_color("warning"),
+            "error": get_color("error"),
         }
-        bg = colors.get(type_, COLORS["primary"])
+        bg = colors.get(type_, get_color("primary"))
 
         # Remover toast anterior
         if self._toast_label and self._toast_label.winfo_exists():

@@ -9,7 +9,8 @@ import customtkinter as ctk
 import calendar
 from datetime import datetime, date
 from database import db
-from components.cards import COLORS, StatusBadge, create_header
+from components.cards import StatusBadge, create_header
+from theme import get_color, COLORS
 from components.dialogs import (
     ConfirmDialog, format_currency, format_date, DateEntry, TimeEntry
 )
@@ -125,7 +126,7 @@ class InstallationsView(ctk.CTkFrame):
 
         ctk.CTkButton(
             nav, text="◀", width=36, height=36, corner_radius=8,
-            fg_color="transparent", hover_color="#334155",
+            fg_color="transparent", hover_color=get_color("sidebar_hover"),
             text_color=CAL_COLORS["header_fg"],
             font=ctk.CTkFont(size=16),
             command=self._prev_month,
@@ -143,7 +144,7 @@ class InstallationsView(ctk.CTkFrame):
 
         ctk.CTkButton(
             nav, text="▶", width=36, height=36, corner_radius=8,
-            fg_color="transparent", hover_color="#334155",
+            fg_color="transparent", hover_color=get_color("sidebar_hover"),
             text_color=CAL_COLORS["header_fg"],
             font=ctk.CTkFont(size=16),
             command=self._next_month,
@@ -302,7 +303,7 @@ class InstallationsView(ctk.CTkFrame):
         self._load_installations(filter_date=target_date)
 
     def _show_day_history(self, day_num):
-        """Mostra histórico completo do dia: instalações e orçamentos."""
+        """Mostra instalações do dia com detalhes expandíveis."""
         target_date = f"{self.cal_year}-{self.cal_month:02d}-{day_num:02d}"
         
         # Buscar instalações
@@ -311,29 +312,16 @@ class InstallationsView(ctk.CTkFrame):
             if str(i.get("scheduled_date", ""))[:10] == target_date
         ]
         
-        # Buscar orçamentos criados neste dia
-        all_quotes = db.get_all_quotes()
-        day_quotes = [
-            q for q in all_quotes
-            if str(q.get("created_at", ""))[:10] == target_date
-        ]
-        
-        # Buscar orçamentos agendados para este dia
-        scheduled_quotes = [
-            q for q in all_quotes
-            if str(q.get("scheduled_date", ""))[:10] == target_date
-        ]
-        
         # Criar dialog
         dialog = ctk.CTkToplevel(self.app)
-        dialog.title(f"Histórico - {day_num:02d}/{self.cal_month:02d}/{self.cal_year}")
-        dialog.geometry("650x500")
+        dialog.title(f"Instalações - {day_num:02d}/{self.cal_month:02d}/{self.cal_year}")
+        dialog.geometry("550x450")
         dialog.grab_set()
         dialog.transient(self.app)
         
         dialog.update_idletasks()
-        x = self.app.winfo_rootx() + (self.app.winfo_width() - 650) // 2
-        y = self.app.winfo_rooty() + (self.app.winfo_height() - 500) // 2
+        x = self.app.winfo_rootx() + (self.app.winfo_width() - 550) // 2
+        y = self.app.winfo_rooty() + (self.app.winfo_height() - 450) // 2
         dialog.geometry(f"+{x}+{y}")
         
         scroll = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
@@ -342,107 +330,171 @@ class InstallationsView(ctk.CTkFrame):
         # Título
         ctk.CTkLabel(
             scroll,
-            text=f"📅 Histórico de {day_num:02d}/{self.cal_month:02d}/{self.cal_year}",
+            text=f"📅 Instalações de {day_num:02d}/{self.cal_month:02d}/{self.cal_year}",
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=COLORS["text"],
         ).pack(pady=(0, 15))
         
+        def refresh_dialog():
+            """Recarrega o conteúdo do dialog."""
+            # Atualizar cache e buscar novamente
+            self._installations_cache = db.get_all_installations(status_filter=self.status_filter)
+            updated_installations = [
+                i for i in self._installations_cache
+                if str(i.get("scheduled_date", ""))[:10] == target_date
+            ]
+            
+            # Limpar conteúdo (exceto título)
+            children = scroll.winfo_children()
+            for child in children[1:]:  # Pular o título
+                child.destroy()
+            
+            if updated_installations:
+                for inst in updated_installations:
+                    self._create_day_installation_card(scroll, inst, dialog, refresh_dialog)
+            else:
+                ctk.CTkLabel(
+                    scroll,
+                    text="Nenhuma instalação neste dia.",
+                    font=ctk.CTkFont(size=13),
+                    text_color=COLORS["text_secondary"],
+                ).pack(pady=40)
+            
+            # Botão fechar
+            ctk.CTkButton(
+                scroll, text="Fechar", fg_color=get_color("primary"),
+                hover_color=get_color("primary_hover"), height=36,
+                command=dialog.destroy,
+            ).pack(pady=(15, 0))
+        
         # Instalações
         if day_installations:
-            ctk.CTkLabel(
-                scroll, text=f"🔧 Instalações ({len(day_installations)})",
-                font=ctk.CTkFont(size=14, weight="bold"),
-                text_color=COLORS["primary"], anchor="w",
-            ).pack(fill="x", pady=(0, 8))
-            
             for inst in day_installations:
-                card = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=8,
-                                     border_width=1, border_color=COLORS["border"])
-                card.pack(fill="x", pady=3)
-                
-                inner = ctk.CTkFrame(card, fg_color="transparent")
-                inner.pack(fill="x", padx=12, pady=8)
-                
-                StatusBadge(inner, inst.get("status", "pending")).pack(side="right")
-                
-                ctk.CTkLabel(
-                    inner, text=inst.get("client_name", "-"),
-                    font=ctk.CTkFont(size=13, weight="bold"),
-                    text_color=COLORS["text"], anchor="w",
-                ).pack(side="left")
-        
-        # Orçamentos criados
-        if day_quotes:
-            ctk.CTkLabel(
-                scroll, text=f"📋 Orçamentos Criados ({len(day_quotes)})",
-                font=ctk.CTkFont(size=14, weight="bold"),
-                text_color=COLORS["success"], anchor="w",
-            ).pack(fill="x", pady=(15, 8))
-            
-            for quote in day_quotes:
-                card = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=8,
-                                     border_width=1, border_color=COLORS["border"])
-                card.pack(fill="x", pady=3)
-                
-                inner = ctk.CTkFrame(card, fg_color="transparent")
-                inner.pack(fill="x", padx=12, pady=8)
-                
-                StatusBadge(inner, quote.get("status", "draft")).pack(side="right")
-                
-                left = ctk.CTkFrame(inner, fg_color="transparent")
-                left.pack(side="left", fill="x", expand=True)
-                
-                ctk.CTkLabel(
-                    left, text=f"#{quote['id']:05d} - {quote.get('client_name', '-')}",
-                    font=ctk.CTkFont(size=13, weight="bold"),
-                    text_color=COLORS["text"], anchor="w",
-                ).pack(anchor="w")
-                
-                ctk.CTkLabel(
-                    left, text=format_currency(quote.get("total", 0)),
-                    font=ctk.CTkFont(size=11),
-                    text_color=COLORS["text_secondary"], anchor="w",
-                ).pack(anchor="w")
-        
-        # Orçamentos agendados
-        if scheduled_quotes:
-            ctk.CTkLabel(
-                scroll, text=f"📆 Orçamentos Agendados ({len(scheduled_quotes)})",
-                font=ctk.CTkFont(size=14, weight="bold"),
-                text_color=COLORS["warning"], anchor="w",
-            ).pack(fill="x", pady=(15, 8))
-            
-            for quote in scheduled_quotes:
-                card = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=8,
-                                     border_width=1, border_color=COLORS["border"])
-                card.pack(fill="x", pady=3)
-                
-                inner = ctk.CTkFrame(card, fg_color="transparent")
-                inner.pack(fill="x", padx=12, pady=8)
-                
-                StatusBadge(inner, quote.get("status", "draft")).pack(side="right")
-                
-                ctk.CTkLabel(
-                    inner, text=quote.get('client_name', '-'),
-                    font=ctk.CTkFont(size=13, weight="bold"),
-                    text_color=COLORS["text"], anchor="w",
-                ).pack(side="left")
-        
-        # Se não houver nada
-        if not day_installations and not day_quotes and not scheduled_quotes:
+                self._create_day_installation_card(scroll, inst, dialog, refresh_dialog)
+        else:
             ctk.CTkLabel(
                 scroll,
-                text="Nenhuma atividade registrada neste dia.",
+                text="Nenhuma instalação neste dia.",
                 font=ctk.CTkFont(size=13),
                 text_color=COLORS["text_secondary"],
             ).pack(pady=40)
         
         # Botão fechar
         ctk.CTkButton(
-            scroll, text="Fechar", fg_color=COLORS["primary"],
-            hover_color="#1d4ed8", height=36,
+            scroll, text="Fechar", fg_color=get_color("primary"),
+            hover_color=get_color("primary_hover"), height=36,
             command=dialog.destroy,
         ).pack(pady=(15, 0))
+
+    def _create_day_installation_card(self, parent, inst, dialog, refresh_callback):
+        """Cria card de instalação no dialog do dia com detalhes e ação de remover."""
+        status = inst.get("status", "pending")
+        
+        card = ctk.CTkFrame(parent, fg_color=COLORS["card"], corner_radius=10,
+                             border_width=1, border_color=COLORS["border"])
+        card.pack(fill="x", pady=4)
+        
+        # Cabeçalho do card (sempre visível)
+        header = ctk.CTkFrame(card, fg_color="transparent")
+        header.pack(fill="x", padx=12, pady=(10, 0))
+        
+        left = ctk.CTkFrame(header, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True)
+        
+        ctk.CTkLabel(
+            left, text=inst.get("client_name", "-"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS["text"], anchor="w",
+        ).pack(side="left")
+        
+        StatusBadge(header, status).pack(side="right")
+        
+        # Detalhes (horário, endereço, descrição)
+        details_frame = ctk.CTkFrame(card, fg_color="transparent")
+        details_frame.pack(fill="x", padx=12, pady=(6, 0))
+        
+        # Horário
+        sched = str(inst.get("scheduled_date", ""))
+        time_str = ""
+        if len(sched) > 10 and " " in sched:
+            time_part = sched.split(" ")[1][:5]
+            if time_part and time_part != "00:00":
+                time_str = time_part
+        
+        if time_str:
+            ctk.CTkLabel(
+                details_frame, text=f"🕐 Horário: {time_str}",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=COLORS["primary"], anchor="w",
+            ).pack(anchor="w", pady=(0, 2))
+        
+        # Endereço
+        addr = inst.get("address", "") or ""
+        if addr:
+            ctk.CTkLabel(
+                details_frame, text=f"📍 {addr}",
+                font=ctk.CTkFont(size=11),
+                text_color=COLORS["text_secondary"], anchor="w",
+            ).pack(anchor="w", pady=(0, 2))
+        
+        # Notas/Descrição
+        notes = inst.get("notes", "") or ""
+        if notes:
+            ctk.CTkLabel(
+                details_frame, text=f"📝 {notes}",
+                font=ctk.CTkFont(size=11),
+                text_color=COLORS["text_secondary"], anchor="w",
+                wraplength=450, justify="left",
+            ).pack(anchor="w", pady=(0, 2))
+        
+        # Valor do orçamento
+        total = inst.get("total", 0)
+        if total:
+            ctk.CTkLabel(
+                details_frame, text=f"💰 {format_currency(total)}",
+                font=ctk.CTkFont(size=11),
+                text_color=COLORS["text_secondary"], anchor="w",
+            ).pack(anchor="w", pady=(0, 2))
+        
+        # Botões de ação
+        btn_frame = ctk.CTkFrame(card, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=12, pady=(6, 10))
+        
+        if status == "pending":
+            ctk.CTkButton(
+                btn_frame, text="▶ Iniciar", font=ctk.CTkFont(size=11),
+                fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+                width=80, height=30, corner_radius=8,
+                command=lambda: (self._update_status(inst["id"], "in-progress"),
+                                 refresh_callback()),
+            ).pack(side="left", padx=(0, 5))
+        
+        if status == "in-progress":
+            ctk.CTkButton(
+                btn_frame, text="✅ Completar", font=ctk.CTkFont(size=11),
+                fg_color=get_color("success"), hover_color=get_color("success_hover"),
+                width=100, height=30, corner_radius=8,
+                command=lambda: (self._update_status(inst["id"], "completed"),
+                                 refresh_callback()),
+            ).pack(side="left", padx=(0, 5))
+        
+        def delete_and_refresh():
+            db.delete_installation(inst["id"])
+            self.app.show_toast("Instalação removida.", "success")
+            self._refresh_all()
+            refresh_callback()
+        
+        ctk.CTkButton(
+            btn_frame, text="🗑️ Remover", font=ctk.CTkFont(size=11),
+            fg_color=COLORS["error_light"], text_color=COLORS["error"],
+            hover_color=COLORS["error_hover_light"],
+            width=90, height=30, corner_radius=8,
+            command=lambda: ConfirmDialog(
+                self.app, "Remover Instalação",
+                f"Remover instalação de {inst.get('client_name', '-')}?",
+                delete_and_refresh,
+            ),
+        ).pack(side="right")
 
     # ==================== LISTA ====================
 
@@ -566,7 +618,7 @@ class InstallationsView(ctk.CTkFrame):
         if status == "pending":
             ctk.CTkButton(
                 right, text="▶ Iniciar", font=ctk.CTkFont(size=10),
-                fg_color=COLORS["primary"], hover_color="#1d4ed8",
+                fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
                 width=70, height=28, corner_radius=8,
                 command=lambda i=inst: self._update_status(i["id"], "in-progress"),
             ).pack(side="left", padx=2)
@@ -574,7 +626,7 @@ class InstallationsView(ctk.CTkFrame):
         if status == "in-progress":
             ctk.CTkButton(
                 right, text="✅ Completar", font=ctk.CTkFont(size=10),
-                fg_color=COLORS["success"], hover_color="#059669",
+                fg_color=get_color("success"), hover_color=get_color("success_hover"),
                 width=85, height=28, corner_radius=8,
                 command=lambda i=inst: self._update_status(i["id"], "completed"),
             ).pack(side="left", padx=2)
@@ -693,14 +745,14 @@ class InstallationsView(ctk.CTkFrame):
         btn_frame.pack(fill="x")
 
         ctk.CTkButton(
-            btn_frame, text="Cancelar", fg_color="#e2e8f0",
-            text_color=COLORS["text"], hover_color="#cbd5e1",
+            btn_frame, text="Cancelar", fg_color=get_color("border"),
+            text_color=get_color("text"), hover_color=get_color("border_hover"),
             width=100, height=36, command=dialog.destroy,
         ).pack(side="left")
 
         ctk.CTkButton(
-            btn_frame, text="📅 Agendar", fg_color=COLORS["primary"],
-            hover_color="#1d4ed8", width=120, height=36,
+            btn_frame, text="📅 Agendar", fg_color=get_color("primary"),
+            hover_color=get_color("primary_hover"), width=120, height=36,
             font=ctk.CTkFont(size=13, weight="bold"),
             command=save,
         ).pack(side="right")

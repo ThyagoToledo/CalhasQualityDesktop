@@ -7,9 +7,11 @@ CRUD completo de produtos com pesquisa, filtro, tipos dinâmicos e materiais vin
 import customtkinter as ctk
 from database import db
 from components.cards import (
-    COLORS, StatusBadge, create_header, create_search_bar
+    StatusBadge, create_header, create_search_bar
 )
+from theme import COLORS, get_color
 from components.dialogs import ConfirmDialog, FormDialog, format_currency
+from utils import format_measure, format_dimensions
 
 
 def _get_product_types_map():
@@ -53,7 +55,7 @@ class ProductsView(ctk.CTkFrame):
         ctk.CTkButton(
             btn_frame, text="  + Novo Tipo  ",
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLORS["warning"], hover_color="#d97706",
+            fg_color=get_color("warning"), hover_color=get_color("warning_hover"),
             height=36, corner_radius=10,
             command=self._open_add_type_dialog,
         ).pack(side="left", padx=(0, 8))
@@ -61,7 +63,7 @@ class ProductsView(ctk.CTkFrame):
         ctk.CTkButton(
             btn_frame, text="  + Novo Produto  ",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=38, corner_radius=10,
             command=self._open_add_dialog,
         ).pack(side="left")
@@ -177,7 +179,8 @@ class ProductsView(ctk.CTkFrame):
                 corner_radius=4,
             ).pack(side="left", padx=(5, 0))
 
-        details = f"Medida: {product['measure']}cm  •  Preço: {format_currency(product['price_per_meter'])}/m"
+        dims = format_dimensions(product.get('width', 0), product.get('length', 0))
+        details = f"Dimensões: {dims}  •  Preço: {format_currency(product['price_per_meter'])}/m"
         if product.get("cost") and product["cost"] > 0:
             details += f"  •  Custo: {format_currency(product['cost'])}/m"
         if product.get("has_dobra"):
@@ -311,7 +314,7 @@ class ProductsView(ctk.CTkFrame):
 
         ctk.CTkButton(
             entry_frame, text="+ Adicionar", font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=35, width=100, corner_radius=8,
             command=add_type,
         ).pack(side="right")
@@ -359,8 +362,8 @@ class ProductsView(ctk.CTkFrame):
 
         ctk.CTkButton(
             dialog, text="Fechar", font=ctk.CTkFont(size=13),
-            fg_color="#e2e8f0", text_color=COLORS["text"],
-            hover_color="#cbd5e1", height=36,
+            fg_color=get_color("border"), text_color=get_color("text"),
+            hover_color=get_color("border_hover"), height=36,
             command=lambda: self._close_type_dialog(dialog),
         ).pack(padx=20, pady=(0, 15), fill="x")
 
@@ -465,7 +468,7 @@ class ProductsView(ctk.CTkFrame):
 
         ctk.CTkButton(
             add_inner, text="+", font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=33, width=40, corner_radius=8,
             command=add_material,
         ).grid(row=0, column=3, padx=(5, 0))
@@ -537,8 +540,8 @@ class ProductsView(ctk.CTkFrame):
 
         ctk.CTkButton(
             dialog, text="Fechar", font=ctk.CTkFont(size=13),
-            fg_color="#e2e8f0", text_color=COLORS["text"],
-            hover_color="#cbd5e1", height=36,
+            fg_color=get_color("border"), text_color=get_color("text"),
+            hover_color=get_color("border_hover"), height=36,
             command=lambda: (dialog.destroy(), self._load_products()),
         ).pack(padx=20, pady=(0, 15), fill="x")
 
@@ -551,7 +554,8 @@ class ProductsView(ctk.CTkFrame):
             {"key": "name", "label": "Nome do Produto", "type": "entry", "required": True},
             {"key": "type", "label": "Tipo", "type": "option",
              "options": type_keys, "required": True},
-            {"key": "measure", "label": "Medida (cm)", "type": "number", "required": True},
+            {"key": "width", "label": "Largura (cm)", "type": "number", "required": True},
+            {"key": "length", "label": "Comprimento (cm)", "type": "number", "required": True},
             {"key": "price_per_meter", "label": "Preço por metro (R$)", "type": "number", "required": True},
             {"key": "cost", "label": "Custo por metro (R$)", "type": "number"},
             {"key": "has_dobra", "label": "Dobra", "type": "option", "options": ["0", "1"],
@@ -573,19 +577,22 @@ class ProductsView(ctk.CTkFrame):
             return
         try:
             price = float(data.get("price_per_meter", 0) or 0)
-            measure = float(data.get("measure", 0) or 0)
+            width = float(data.get("width", 0) or 0)
+            length = float(data.get("length", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
             has_dobra = int(data.get("has_dobra", 0) or 0)
-            if price <= 0 or measure <= 0:
-                self.app.show_toast("Preço e medida devem ser maiores que zero.", "error")
+            if price <= 0 or width <= 0:
+                self.app.show_toast("Preço e largura devem ser maiores que zero.", "error")
                 return
             db.create_product(
                 name=name,
                 type=data.get("type", "calha"),
-                measure=measure,
+                measure=width,
                 price_per_meter=price,
                 cost=cost,
                 description=data.get("description", ""),
+                width=width,
+                length=length,
             )
             # Atualizar dobra separadamente
             products = db.get_all_products(search=name)
@@ -607,18 +614,21 @@ class ProductsView(ctk.CTkFrame):
     def _save_edit_product(self, product_id, data):
         try:
             price = float(data.get("price_per_meter", 0) or 0)
-            measure = float(data.get("measure", 0) or 0)
+            width = float(data.get("width", 0) or 0)
+            length = float(data.get("length", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
             has_dobra = int(data.get("has_dobra", 0) or 0)
             db.update_product(
                 product_id,
                 name=data.get("name", ""),
                 type=data.get("type", "calha"),
-                measure=measure,
+                measure=width,
                 price_per_meter=price,
                 cost=cost,
                 has_dobra=has_dobra,
                 description=data.get("description", ""),
+                width=width,
+                length=length,
             )
             self.app.show_toast("Produto atualizado!", "success")
             self._load_products()

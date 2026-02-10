@@ -104,6 +104,19 @@ def init_database():
     except sqlite3.OperationalError:
         pass  # Coluna já existe
     
+    # Migração: adicionar colunas width e length se não existirem
+    try:
+        cursor.execute("ALTER TABLE products ADD COLUMN width REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE products ADD COLUMN length REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Migrar dados antigos: se measure > 0 e width/length = 0, copiar measure para width
+    cursor.execute("UPDATE products SET width = measure WHERE width = 0 AND measure > 0")
+    
     # Tabela de Materiais vinculados a Produtos (para descontar estoque)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS product_materials (
@@ -144,6 +157,12 @@ def init_database():
     except sqlite3.OperationalError:
         pass  # Coluna já existe
     
+    # Migração: adicionar coluna discount_total se não existir
+    try:
+        cursor.execute("ALTER TABLE quotes ADD COLUMN discount_total REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+    
     # Migração: remover CHECK constraint de produtos (tipo dinâmico)
     # SQLite não permite ALTER TABLE para remover constraints,
     # mas como criamos a tabela sem o CHECK, novas databases já ficam OK.
@@ -167,6 +186,25 @@ def init_database():
             FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
         )
     """)
+    
+    # Migração: adicionar coluna discount se não existir
+    try:
+        cursor.execute("ALTER TABLE quote_items ADD COLUMN discount REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+    
+    # Migração: adicionar colunas width e length a quote_items
+    try:
+        cursor.execute("ALTER TABLE quote_items ADD COLUMN width REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE quote_items ADD COLUMN length REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Migrar dados antigos de quote_items
+    cursor.execute("UPDATE quote_items SET width = measure WHERE width = 0 AND measure > 0")
     
     # Tabela de Inventário/Estoque
     cursor.execute("""
@@ -198,6 +236,20 @@ def init_database():
         )
     """)
     
+    # Tabela de Pagamentos
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            payment_method TEXT NOT NULL,
+            notes TEXT,
+            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
+        )
+    """)
+    
     # Inserir configurações padrão se não existir
     cursor.execute("SELECT COUNT(*) FROM settings")
     if cursor.fetchone()[0] == 0:
@@ -219,14 +271,15 @@ def _auto_backup():
 # ============== CRUD de Produtos ==============
 
 def create_product(name: str, type: str, measure: float, price_per_meter: float, 
-                   cost: float = 0, description: str = "") -> int:
+                   cost: float = 0, description: str = "",
+                   width: float = 0, length: float = 0) -> int:
     """Cria um novo produto e retorna o ID."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO products (name, type, measure, price_per_meter, cost, description)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (name, type, measure, price_per_meter, cost, description))
+        INSERT INTO products (name, type, measure, price_per_meter, cost, description, width, length)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (name, type, measure, price_per_meter, cost, description, width, length))
     product_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -275,7 +328,7 @@ def update_product(product_id: int, **kwargs) -> bool:
     fields = []
     values = []
     for key, value in kwargs.items():
-        if key in ['name', 'type', 'measure', 'price_per_meter', 'cost', 'has_dobra', 'description']:
+        if key in ['name', 'type', 'measure', 'price_per_meter', 'cost', 'has_dobra', 'description', 'width', 'length']:
             fields.append(f"{key} = ?")
             values.append(value)
     
@@ -379,7 +432,8 @@ def update_quote(quote_id: int, **kwargs) -> bool:
     
     allowed_fields = ['client_name', 'client_phone', 'client_address', 'status',
                       'technical_notes', 'contract_terms', 'payment_methods',
-                      'scheduled_date', 'total', 'cost_total', 'profit', 'profitability']
+                      'scheduled_date', 'total', 'cost_total', 'profit', 'profitability',
+                      'discount_total']
     
     fields = []
     values = []
@@ -422,6 +476,11 @@ def recalculate_quote_totals(quote_id: int):
     conn = get_connection()
     cursor = conn.cursor()
     
+    # Buscar desconto total do orçamento
+    cursor.execute("SELECT discount_total FROM quotes WHERE id = ?", (quote_id,))
+    row_quote = cursor.fetchone()
+    discount_total = row_quote['discount_total'] if row_quote else 0
+    
     cursor.execute("""
         SELECT COALESCE(SUM(total), 0) as total, 
                COALESCE(SUM(cost_total), 0) as cost_total 
@@ -429,8 +488,13 @@ def recalculate_quote_totals(quote_id: int):
     """, (quote_id,))
     
     row = cursor.fetchone()
-    total = row['total']
+    subtotal = row['total']  # Total antes do desconto geral
     cost_total = row['cost_total']
+    
+    # Aplicar desconto total sobre o subtotal
+    discount_amount = subtotal * (discount_total / 100) if discount_total > 0 else 0
+    total = subtotal - discount_amount
+    
     profit = total - cost_total
     profitability = (profit / total * 100) if total > 0 else 0
     
@@ -452,7 +516,7 @@ def get_dobra_value() -> float:
 
 
 def add_quote_item(quote_id: int, product_id: int, meters: float, 
-                   custom_price: float = None) -> int:
+                   custom_price: float = None, discount: float = 0) -> int:
     """Adiciona um item ao orçamento."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -469,16 +533,23 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
     if product['has_dobra']:
         dobra = get_dobra_value()
         price_per_meter += dobra
-    total = meters * price_per_meter
+    
+    # Calcular total com desconto do item
+    subtotal = meters * price_per_meter
+    discount_amount = subtotal * (discount / 100) if discount > 0 else 0
+    total = subtotal - discount_amount
+    
     cost_per_meter = product['cost'] or 0
     cost_total = meters * cost_per_meter
     
     cursor.execute("""
         INSERT INTO quote_items (quote_id, product_id, product_name, measure, 
-                                meters, price_per_meter, total, cost_per_meter, cost_total)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                meters, price_per_meter, total, cost_per_meter, cost_total, discount,
+                                width, length)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (quote_id, product_id, product['name'], product['measure'],
-          meters, price_per_meter, total, cost_per_meter, cost_total))
+          meters, price_per_meter, total, cost_per_meter, cost_total, discount,
+          product.get('width', 0) or 0, product.get('length', 0) or 0))
     
     item_id = cursor.lastrowid
     conn.commit()
@@ -502,6 +573,46 @@ def remove_quote_item(item_id: int) -> bool:
     
     quote_id = row['quote_id']
     cursor.execute("DELETE FROM quote_items WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    
+    recalculate_quote_totals(quote_id)
+    _auto_backup()
+    return True
+
+
+def update_quote_item(item_id: int, meters: float = None, 
+                     custom_price: float = None, discount: float = None) -> bool:
+    """Atualiza um item do orçamento."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM quote_items WHERE id = ?", (item_id,))
+    item = cursor.fetchone()
+    if not item:
+        conn.close()
+        return False
+    
+    quote_id = item['quote_id']
+    new_meters = meters if meters is not None else item['meters']
+    new_price = custom_price if custom_price is not None else item['price_per_meter']
+    new_discount = discount if discount is not None else item['discount']
+    
+    # Recalcular total com desconto
+    subtotal = new_meters * new_price
+    discount_amount = subtotal * (new_discount / 100) if new_discount > 0 else 0
+    new_total = subtotal - discount_amount
+    
+    # Recalcular custo
+    cost_per_meter = item['cost_per_meter'] or 0
+    new_cost_total = new_meters * cost_per_meter
+    
+    cursor.execute("""
+        UPDATE quote_items 
+        SET meters = ?, price_per_meter = ?, discount = ?, total = ?, cost_total = ?
+        WHERE id = ?
+    """, (new_meters, new_price, new_discount, new_total, new_cost_total, item_id))
+    
     conn.commit()
     conn.close()
     
@@ -883,6 +994,107 @@ def deduct_stock_for_quote(quote_id: int) -> List[str]:
     return warnings
 
 
+# ============== CRUD de Pagamentos ==============
+
+def add_payment(quote_id: int, amount: float, payment_method: str, notes: str = "", payment_date: str = None) -> int:
+    """Registra um pagamento para um orçamento."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if not payment_date:
+        payment_date = datetime.now().isoformat()
+    
+    cursor.execute("""
+        INSERT INTO payments (quote_id, amount, payment_method, notes, payment_date)
+        VALUES (?, ?, ?, ?, ?)
+    """, (quote_id, amount, payment_method, notes, payment_date))
+    
+    payment_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    _auto_backup()
+    return payment_id
+
+
+def get_payments_by_quote(quote_id: int) -> List[Dict]:
+    """Retorna todos os pagamentos de um orçamento."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM payments WHERE quote_id = ? ORDER BY payment_date DESC
+    """, (quote_id,))
+    payments = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return payments
+
+
+def delete_payment(payment_id: int) -> bool:
+    """Remove um pagamento."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM payments WHERE id = ?", (payment_id,))
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+def get_payment_summary(quote_id: int) -> Dict:
+    """Retorna resumo financeiro de um orçamento: total, pago, saldo devedor."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT total FROM quotes WHERE id = ?", (quote_id,))
+    row = cursor.fetchone()
+    total = row['total'] if row else 0
+    
+    cursor.execute("""
+        SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE quote_id = ?
+    """, (quote_id,))
+    total_paid = cursor.fetchone()['total_paid']
+    
+    balance = total - total_paid
+    
+    conn.close()
+    return {
+        'total': total,
+        'total_paid': total_paid,
+        'balance': max(0, balance),
+        'is_paid': balance <= 0,
+    }
+
+
+def get_all_payment_summaries() -> Dict[int, Dict]:
+    """Retorna resumo de pagamentos para todos os orçamentos de uma só vez."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT q.id, q.total, COALESCE(SUM(p.amount), 0) as total_paid
+        FROM quotes q
+        LEFT JOIN payments p ON q.id = p.quote_id
+        GROUP BY q.id
+    """)
+    
+    summaries = {}
+    for row in cursor.fetchall():
+        qid = row['id']
+        total = row['total']
+        total_paid = row['total_paid']
+        balance = total - total_paid
+        summaries[qid] = {
+            'total': total,
+            'total_paid': total_paid,
+            'balance': max(0, balance),
+            'is_paid': balance <= 0,
+        }
+    
+    conn.close()
+    return summaries
+
+
 # ============== Analytics ==============
 
 def get_dashboard_stats() -> Dict:
@@ -934,6 +1146,29 @@ def get_dashboard_stats() -> Dict:
     # Itens com estoque baixo
     cursor.execute("SELECT COUNT(*) FROM inventory WHERE quantity < min_stock AND min_stock > 0")
     stats['low_stock_count'] = cursor.fetchone()[0]
+    
+    # Total recebido (pagamentos)
+    cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
+    stats['total_received'] = cursor.fetchone()[0]
+    
+    # Total devedor (total dos orçamentos aprovados/completados - pagamentos)
+    cursor.execute("""
+        SELECT COALESCE(SUM(q.total), 0) - COALESCE((
+            SELECT SUM(p.amount) FROM payments p 
+            WHERE p.quote_id IN (SELECT id FROM quotes WHERE status IN ('approved', 'completed'))
+        ), 0)
+        FROM quotes q WHERE q.status IN ('approved', 'completed')
+    """)
+    stats['total_pending'] = max(0, cursor.fetchone()[0])
+    
+    # Orçamentos quitados
+    cursor.execute("""
+        SELECT COUNT(*) FROM quotes q
+        WHERE q.status IN ('approved', 'completed')
+        AND q.total > 0
+        AND q.total <= (SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.quote_id = q.id)
+    """)
+    stats['paid_quotes'] = cursor.fetchone()[0]
     
     conn.close()
     return stats

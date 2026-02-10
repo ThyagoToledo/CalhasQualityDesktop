@@ -5,6 +5,7 @@ Sidebar com botões de navegação estilizados e visual moderno.
 """
 
 import customtkinter as ctk
+from theme import get_color
 
 
 class Sidebar(ctk.CTkFrame):
@@ -20,7 +21,7 @@ class Sidebar(ctk.CTkFrame):
     ]
 
     def __init__(self, parent, on_navigate, company_name="CalhaGest"):
-        super().__init__(parent, width=230, corner_radius=0, fg_color="#0f172a")
+        super().__init__(parent, width=230, corner_radius=0, fg_color=get_color("sidebar_bg"))
         self.on_navigate = on_navigate
         self.buttons = {}
         self.grid_propagate(False)
@@ -30,7 +31,7 @@ class Sidebar(ctk.CTkFrame):
         logo_frame.pack(fill="x", padx=20, pady=(25, 0))
 
         # Barra de acento azul
-        ctk.CTkFrame(logo_frame, width=4, height=40, fg_color="#2563eb",
+        ctk.CTkFrame(logo_frame, width=4, height=40, fg_color=get_color("sidebar_accent"),
                      corner_radius=2).pack(side="left", padx=(0, 12))
 
         logo_text = ctk.CTkFrame(logo_frame, fg_color="transparent")
@@ -40,7 +41,7 @@ class Sidebar(ctk.CTkFrame):
             logo_text,
             text=company_name,
             font=ctk.CTkFont(size=20, weight="bold"),
-            text_color="white",
+            text_color=get_color("text"),
         )
         self.company_label.pack(anchor="w")
 
@@ -48,11 +49,11 @@ class Sidebar(ctk.CTkFrame):
             logo_text,
             text="Gestão de Calhas",
             font=ctk.CTkFont(size=11),
-            text_color="#475569",
+            text_color=get_color("sidebar_text"),
         ).pack(anchor="w")
 
         # Separador
-        sep = ctk.CTkFrame(self, height=1, fg_color="#1e293b")
+        sep = ctk.CTkFrame(self, height=1, fg_color=get_color("border"))
         sep.pack(fill="x", padx=15, pady=(20, 15))
 
         # Seção de menu
@@ -60,7 +61,7 @@ class Sidebar(ctk.CTkFrame):
             self,
             text="MENU PRINCIPAL",
             font=ctk.CTkFont(size=9, weight="bold"),
-            text_color="#475569",
+            text_color=get_color("sidebar_text"),
             anchor="w",
         ).pack(padx=25, pady=(0, 8), anchor="w")
 
@@ -71,8 +72,8 @@ class Sidebar(ctk.CTkFrame):
                 text=f"  {icon}  {label}",
                 font=ctk.CTkFont(size=13),
                 fg_color="transparent",
-                text_color="#94a3b8",
-                hover_color="#1e293b",
+                text_color=get_color("sidebar_text"),
+                hover_color=get_color("sidebar_hover"),
                 anchor="w",
                 height=42,
                 corner_radius=10,
@@ -86,7 +87,7 @@ class Sidebar(ctk.CTkFrame):
         spacer.pack(fill="both", expand=True)
 
         # Separador inferior
-        sep2 = ctk.CTkFrame(self, height=1, fg_color="#1e293b")
+        sep2 = ctk.CTkFrame(self, height=1, fg_color=get_color("border"))
         sep2.pack(fill="x", padx=15, pady=(0, 10))
 
         # Botão de configurações
@@ -95,8 +96,8 @@ class Sidebar(ctk.CTkFrame):
             text="  ⚙️  Configurações",
             font=ctk.CTkFont(size=13),
             fg_color="transparent",
-            text_color="#94a3b8",
-            hover_color="#1e293b",
+            text_color=get_color("sidebar_text"),
+            hover_color=get_color("sidebar_hover"),
             anchor="w",
             height=42,
             corner_radius=10,
@@ -113,10 +114,6 @@ class Sidebar(ctk.CTkFrame):
         """Define o botão ativo (destacado)."""
         for btn_key, btn in self.buttons.items():
             if btn_key == key:
-                btn.configure(fg_color="#2563eb", text_color="white")
+                btn.configure(fg_color=get_color("sidebar_active"), text_color=get_color("text"))
             else:
-                btn.configure(fg_color="transparent", text_color="#94a3b8")
-
-    def update_company_name(self, name):
-        """Atualiza o nome da empresa exibido."""
-        self.company_label.configure(text=name)
+                btn.configure(fg_color="transparent", text_color=get_color("sidebar_text"))

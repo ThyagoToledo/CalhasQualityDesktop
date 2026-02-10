@@ -6,7 +6,8 @@ Painel principal com estatísticas, orçamentos recentes e alertas.
 
 import customtkinter as ctk
 from database import db
-from components.cards import StatCard, StatusBadge, create_header, COLORS
+from components.cards import StatCard, StatusBadge, create_header
+from theme import COLORS, get_color
 from components.dialogs import format_currency, format_date
 
 

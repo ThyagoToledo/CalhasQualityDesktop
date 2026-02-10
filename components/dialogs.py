@@ -6,6 +6,7 @@ Diálogos de confirmação, entrada e funções utilitárias de UI.
 
 import customtkinter as ctk
 from datetime import datetime
+from theme import get_color
 
 
 class DateEntry(ctk.CTkFrame):
@@ -200,7 +201,7 @@ class ConfirmDialog(ctk.CTkToplevel):
             self,
             text=message,
             font=ctk.CTkFont(size=13),
-            text_color="#1e293b",
+            text_color=get_color("text"),
             wraplength=350,
         ).pack(padx=20, pady=(0, 15))
 
@@ -211,9 +212,9 @@ class ConfirmDialog(ctk.CTkToplevel):
         ctk.CTkButton(
             btn_frame,
             text="Cancelar",
-            fg_color="#e2e8f0",
-            text_color="#1e293b",
-            hover_color="#cbd5e1",
+            fg_color=get_color("border"),
+            text_color=get_color("text"),
+            hover_color=get_color("border_hover"),
             width=120,
             command=self.destroy,
         ).pack(side="left", expand=True, padx=5)
@@ -221,8 +222,8 @@ class ConfirmDialog(ctk.CTkToplevel):
         ctk.CTkButton(
             btn_frame,
             text="Confirmar",
-            fg_color="#ef4444",
-            hover_color="#dc2626",
+            fg_color=get_color("error"),
+            hover_color=get_color("error_hover"),
             width=120,
             command=self._confirm,
         ).pack(side="right", expand=True, padx=5)
@@ -284,7 +285,7 @@ class FormDialog(ctk.CTkToplevel):
                 scroll,
                 text=lbl_text,
                 font=ctk.CTkFont(size=12, weight="bold"),
-                text_color="#1e293b",
+                text_color=get_color("text"),
                 anchor="w",
             ).pack(fill="x", pady=(8, 2))
 
@@ -331,9 +332,9 @@ class FormDialog(ctk.CTkToplevel):
         ctk.CTkButton(
             btn_frame,
             text="Cancelar",
-            fg_color="#e2e8f0",
-            text_color="#1e293b",
-            hover_color="#cbd5e1",
+            fg_color=get_color("border"),
+            text_color=get_color("text"),
+            hover_color=get_color("border_hover"),
             width=120,
             command=self.destroy,
         ).pack(side="left", padx=5)
@@ -341,8 +342,8 @@ class FormDialog(ctk.CTkToplevel):
         ctk.CTkButton(
             btn_frame,
             text="Salvar",
-            fg_color="#2563eb",
-            hover_color="#1d4ed8",
+            fg_color=get_color("primary"),
+            hover_color=get_color("primary_hover"),
             width=120,
             command=self._save,
         ).pack(side="right", padx=5)

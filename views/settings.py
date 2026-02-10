@@ -15,7 +15,8 @@ from services.backup import (
     get_backup_dir, set_backup_dir, get_default_backup_dir,
     save_backup, load_backup, restore_from_backup, get_backup_filepath,
 )
-from components.cards import COLORS, create_header
+from components.cards import create_header
+from theme import get_color, COLORS
 from components.dialogs import ConfirmDialog
 
 
@@ -77,7 +78,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             company_card, text="💾 Salvar Informações",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=38, corner_radius=10,
             command=self._save_company,
         ).pack(padx=15, pady=(0, 15), anchor="e")
@@ -120,7 +121,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             dobra_inner, text="💾 Salvar",
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=35, width=100, corner_radius=8,
             command=self._save_dobra,
         ).pack(side="left")
@@ -168,7 +169,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             path_row, text="📂 Alterar",
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=35, width=100, corner_radius=8,
             command=self._choose_backup_folder,
         ).grid(row=0, column=1)
@@ -181,7 +182,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         self.backup_status_label = ctk.CTkLabel(
             backup_card, text=status_text,
             font=ctk.CTkFont(size=11),
-            text_color=COLORS["success"] if file_exists else COLORS["text_secondary"],
+            text_color=get_color("success") if file_exists else get_color("text_secondary"),
             justify="left",
         )
         self.backup_status_label.pack(padx=15, pady=(0, 10), anchor="w")
@@ -193,7 +194,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             backup_btn_frame, text="📦 Fazer Backup Agora",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLORS["primary"], hover_color="#1d4ed8",
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=38, corner_radius=10, width=200,
             command=self._manual_backup,
         ).pack(side="left", padx=(0, 10))
@@ -201,7 +202,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             backup_btn_frame, text="📥 Restaurar Backup",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLORS["success"], hover_color="#059669",
+            fg_color=get_color("success"), hover_color=get_color("success_hover"),
             height=38, corner_radius=10, width=200,
             command=self._confirm_restore,
         ).pack(side="left", padx=(0, 10))
@@ -209,7 +210,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             backup_btn_frame, text="📂 Restaurar de Arquivo",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color="#8b5cf6", hover_color="#7c3aed",
+            fg_color=get_color("purple"), hover_color=get_color("purple_hover"),
             height=38, corner_radius=10, width=200,
             command=self._restore_from_file,
         ).pack(side="left")
@@ -221,7 +222,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             backup_btn_frame2, text="📂 Abrir Pasta do Backup",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color="#6b7280", hover_color="#4b5563",
+            fg_color=get_color("gray"), hover_color=get_color("gray_hover"),
             height=38, corner_radius=10, width=200,
             command=self._open_backup_folder,
         ).pack(side="left")
@@ -247,8 +248,8 @@ class SettingsView(ctk.CTkScrollableFrame):
             theme_inner,
             text=f"{current_icon} Alternar para {current_theme_text}",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLORS["primary"],
-            hover_color="#1d4ed8",
+            fg_color=get_color("primary"),
+            hover_color=get_color("primary_hover"),
             height=38,
             corner_radius=10,
             command=self.app.toggle_theme,
@@ -302,7 +303,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             btn_frame, text="�️ Limpar Todos os Dados",
             font=ctk.CTkFont(size=13),
-            fg_color=COLORS["error"], hover_color="#dc2626",
+            fg_color=get_color("error"), hover_color=get_color("error_hover"),
             height=38, corner_radius=10, width=200,
             command=self._confirm_clear_data,
         ).pack(side="right", padx=5)

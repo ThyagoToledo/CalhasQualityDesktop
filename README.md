@@ -19,12 +19,23 @@
 | Módulo | Descrição |
 |--------|-----------|
 | **Dashboard** | Visão geral com estatísticas e indicadores do negócio |
-| **Orçamentos** | Criar, editar e gerar PDFs profissionais de orçamentos |
-| **Produtos** | Catálogo de produtos com preços por metro |
+| **Orçamentos** | Criar, editar (inclusive aprovados), aplicar descontos e gerar PDFs profissionais |
+| **Pagamentos** | Registrar pagamentos, controlar saldo devedor, separar quitados de devedores |
+| **Produtos** | Catálogo de produtos com dimensões (largura × comprimento) |
 | **Estoque** | Controle de materiais com alerta de estoque mínimo |
-| **Instalações** | Agendamento com calendário visual e histórico |
-| **Analíticos** | Gráficos de faturamento, evolução financeira e filtros por período |
+| **Instalações** | Agendamento com calendário visual e histórico de execução |
+| **Analíticos** | Gráficos de faturamento, evolução financeira, recebimentos e devedores |
 | **Configurações** | Dados da empresa e alternância de tema claro/escuro |
+
+### Destaques do Sistema
+
+- **Edição de Orçamentos Aprovados** — Modifique orçamentos já aprovados, adicione descontos
+- **Sistema de Pagamentos** — Registre pagamentos, acompanhe saldo devedor, identifique quitados
+- **Filtro de Pagamentos** — Separe visualmente orçamentos "Quitados" de "Devedores" na lista
+- **Relatórios de Pagamento** — Aba dedicada com detalhamento de recebimentos e saldos devedores
+- **Dashboard Financeiro** — Cards com Total Recebido, Saldo Devedor Total e Orçamentos Quitados
+- **Tema Claro/Escuro** — Alternância automática de cores em toda a aplicação
+- **PDFs Profissionais** — Inclui situação financeira, descontos e informações de pagamento
 
 ##  Screenshots
 

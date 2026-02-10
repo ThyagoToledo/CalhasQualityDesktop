@@ -8,7 +8,8 @@ import customtkinter as ctk
 import os
 import tempfile
 from database import db
-from components.cards import COLORS, create_header
+from components.cards import create_header
+from theme import get_color, COLORS
 from components.dialogs import format_currency
 
 
@@ -58,6 +59,27 @@ class AnalyticsView(ctk.CTkFrame):
             ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=18, weight="bold"),
                          text_color=color).pack(pady=(2, 0))
 
+        # Cards de pagamentos (segunda linha)
+        pay_grid = ctk.CTkFrame(summary, fg_color="transparent")
+        pay_grid.pack(fill="x", padx=15, pady=(0, 15))
+        pay_grid.grid_columnconfigure((0, 1, 2), weight=1)
+
+        pay_items = [
+            ("💵 Recebido", format_currency(stats.get("total_received", 0)), COLORS["success"]),
+            ("📛 Saldo Devedor", format_currency(stats.get("total_pending", 0)), COLORS["error"]),
+            ("🏷️ Quitados", str(stats.get("paid_quotes", 0)), COLORS["primary"]),
+        ]
+
+        for col, (label, value, color) in enumerate(pay_items):
+            cell = ctk.CTkFrame(pay_grid, fg_color="transparent")
+            cell.grid(row=0, column=col, padx=8, sticky="nsew")
+
+            ctk.CTkFrame(cell, height=3, fg_color=color, corner_radius=2).pack(fill="x", pady=(0, 8))
+            ctk.CTkLabel(cell, text=label, font=ctk.CTkFont(size=11),
+                         text_color=COLORS["text_secondary"]).pack()
+            ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=16, weight="bold"),
+                         text_color=color).pack(pady=(2, 0))
+
         # Filtro de período
         filter_frame = ctk.CTkFrame(self, fg_color="transparent")
         filter_frame.pack(fill="x", pady=(0, 10))
@@ -85,11 +107,11 @@ class AnalyticsView(ctk.CTkFrame):
             corner_radius=12,
             border_width=1,
             border_color=COLORS["border"],
-            segmented_button_fg_color="#e2e8f0",
-            segmented_button_selected_color=COLORS["primary"],
-            segmented_button_selected_hover_color="#1d4ed8",
-            segmented_button_unselected_color="#e2e8f0",
-            segmented_button_unselected_hover_color="#cbd5e1",
+            segmented_button_fg_color=get_color("border"),
+            segmented_button_selected_color=get_color("primary"),
+            segmented_button_selected_hover_color=get_color("primary_hover"),
+            segmented_button_unselected_color=get_color("border"),
+            segmented_button_unselected_hover_color=get_color("border_hover"),
             text_color=COLORS["text"],
             text_color_disabled=COLORS["text_secondary"],
         )
@@ -105,6 +127,7 @@ class AnalyticsView(ctk.CTkFrame):
         tab_revenue = self.tabview.add("💰 Faturamento vs Custo")
         tab_evolution = self.tabview.add("📈 Evolução Financeira")
         tab_status = self.tabview.add("📋 Orçamentos por Status")
+        tab_payments = self.tabview.add("💵 Pagamentos")
         tab_overview = self.tabview.add("📊 Visão Geral")
 
         # Carregar dados
@@ -124,7 +147,8 @@ class AnalyticsView(ctk.CTkFrame):
         else:
             self._show_no_data(tab_status)
 
-        self._fill_overview_tab(tab_overview, analytics, quotes_by_status)
+        self._fill_payments_tab(tab_payments, stats)
+        self._fill_overview_tab(tab_overview, analytics, quotes_by_status, stats)
 
     def _on_period_change(self, value):
         """Atualiza os gráficos quando o período muda."""
@@ -172,9 +196,11 @@ class AnalyticsView(ctk.CTkFrame):
 
     def _rebuild_tabs(self, analytics, quotes_by_status):
         """Reconstrói todas as abas com novos dados."""
+        stats = db.get_dashboard_stats()
+
         # Remover todas as abas existentes
         for tab_name in ["💰 Faturamento vs Custo", "📈 Evolução Financeira", 
-                         "📋 Orçamentos por Status", "📊 Visão Geral"]:
+                         "📋 Orçamentos por Status", "💵 Pagamentos", "📊 Visão Geral"]:
             try:
                 self.tabview.delete(tab_name)
             except:
@@ -184,6 +210,7 @@ class AnalyticsView(ctk.CTkFrame):
         tab_revenue = self.tabview.add("💰 Faturamento vs Custo")
         tab_evolution = self.tabview.add("📈 Evolução Financeira")
         tab_status = self.tabview.add("📋 Orçamentos por Status")
+        tab_payments = self.tabview.add("💵 Pagamentos")
         tab_overview = self.tabview.add("📊 Visão Geral")
         
         # Preencher com novos dados
@@ -199,7 +226,8 @@ class AnalyticsView(ctk.CTkFrame):
         else:
             self._show_no_data(tab_status)
         
-        self._fill_overview_tab(tab_overview, analytics, quotes_by_status)
+        self._fill_payments_tab(tab_payments, stats)
+        self._fill_overview_tab(tab_overview, analytics, quotes_by_status, stats)
 
     def _show_no_data(self, parent):
         """Mostra mensagem de dados insuficientes."""
@@ -310,7 +338,7 @@ class AnalyticsView(ctk.CTkFrame):
         except Exception as e:
             ctk.CTkLabel(parent, text=f"Erro: {e}", text_color=COLORS["error"]).pack(pady=10)
 
-    def _fill_overview_tab(self, parent, analytics_data, quotes_data):
+    def _fill_overview_tab(self, parent, analytics_data, quotes_data, stats=None):
         """Aba de visão geral com todos os dados resumidos."""
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
@@ -322,13 +350,15 @@ class AnalyticsView(ctk.CTkFrame):
             text_color=COLORS["text_secondary"],
         ).pack(anchor="w", padx=10, pady=(10, 12))
 
+        metrics = []
+
         if analytics_data:
             total_revenue = sum(d.get("revenue", 0) for d in analytics_data)
             total_cost = sum(d.get("cost", 0) for d in analytics_data)
             total_profit = sum(d.get("profit", 0) for d in analytics_data)
             margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
 
-            metrics = [
+            metrics += [
                 ("Faturamento Total", format_currency(total_revenue), COLORS["primary"]),
                 ("Custo Total", format_currency(total_cost), COLORS["error"]),
                 ("Lucro Total", format_currency(total_profit), COLORS["success"]),
@@ -336,6 +366,17 @@ class AnalyticsView(ctk.CTkFrame):
                 ("Meses Analisados", str(len(analytics_data)), COLORS["primary"]),
             ]
 
+        # Adicionar métricas de pagamento
+        if stats is None:
+            stats = db.get_dashboard_stats()
+
+        metrics += [
+            ("💵 Total Recebido", format_currency(stats.get("total_received", 0)), COLORS["success"]),
+            ("📛 Saldo Devedor Total", format_currency(stats.get("total_pending", 0)), COLORS["error"]),
+            ("✅ Orçamentos Quitados", str(stats.get("paid_quotes", 0)), COLORS["primary"]),
+        ]
+
+        if metrics:
             for label, value, color in metrics:
                 row = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=8,
                                     border_width=1, border_color=COLORS["border"])
@@ -354,6 +395,139 @@ class AnalyticsView(ctk.CTkFrame):
                 scroll, text="Sem dados financeiros disponíveis.",
                 font=ctk.CTkFont(size=13), text_color=COLORS["text_secondary"],
             ).pack(padx=10, pady=20)
+
+    def _fill_payments_tab(self, parent, stats):
+        """Aba de pagamentos com detalhes de recebimentos e devedores."""
+        scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            scroll,
+            text="Detalhamento de pagamentos por orçamento",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["text_secondary"],
+        ).pack(anchor="w", padx=10, pady=(10, 12))
+
+        # Resumo geral de pagamentos
+        summary_frame = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=10,
+                                      border_width=1, border_color=COLORS["border"])
+        summary_frame.pack(fill="x", padx=10, pady=(0, 15))
+
+        summary_grid = ctk.CTkFrame(summary_frame, fg_color="transparent")
+        summary_grid.pack(fill="x", padx=15, pady=15)
+        summary_grid.grid_columnconfigure((0, 1, 2), weight=1)
+
+        total_received = stats.get("total_received", 0)
+        total_pending = stats.get("total_pending", 0)
+        paid_count = stats.get("paid_quotes", 0)
+
+        pay_items = [
+            ("💵 Total Recebido", format_currency(total_received), COLORS["success"]),
+            ("📛 Saldo Devedor", format_currency(total_pending), COLORS["error"]),
+            ("✅ Quitados", str(paid_count), COLORS["primary"]),
+        ]
+
+        for col, (label, value, color) in enumerate(pay_items):
+            cell = ctk.CTkFrame(summary_grid, fg_color="transparent")
+            cell.grid(row=0, column=col, padx=8, sticky="nsew")
+            ctk.CTkFrame(cell, height=3, fg_color=color, corner_radius=2).pack(fill="x", pady=(0, 8))
+            ctk.CTkLabel(cell, text=label, font=ctk.CTkFont(size=11),
+                         text_color=COLORS["text_secondary"]).pack()
+            ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=18, weight="bold"),
+                         text_color=color).pack(pady=(2, 0))
+
+        # Lista de orçamentos com saldo
+        all_quotes = db.get_all_quotes()
+        summaries = db.get_all_payment_summaries()
+
+        # Seção: Orçamentos com saldo devedor
+        ctk.CTkLabel(
+            scroll, text="📛 Orçamentos com Saldo Devedor",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS["error"],
+        ).pack(anchor="w", padx=10, pady=(10, 5))
+
+        pending_found = False
+        for q in all_quotes:
+            qid = q.get("id")
+            if q.get("status") not in ("approved", "completed"):
+                continue
+            summary = summaries.get(qid, {})
+            balance = summary.get("balance", q.get("total", 0))
+            if balance <= 0:
+                continue
+            pending_found = True
+            self._create_payment_quote_row(scroll, q, summary)
+
+        if not pending_found:
+            ctk.CTkLabel(
+                scroll, text="Nenhum orçamento com saldo devedor.",
+                font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", padx=20, pady=5)
+
+        # Seção: Orçamentos quitados
+        ctk.CTkLabel(
+            scroll, text="✅ Orçamentos Quitados",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS["success"],
+        ).pack(anchor="w", padx=10, pady=(15, 5))
+
+        paid_found = False
+        for q in all_quotes:
+            qid = q.get("id")
+            if q.get("status") not in ("approved", "completed"):
+                continue
+            summary = summaries.get(qid, {})
+            balance = summary.get("balance", q.get("total", 0))
+            total_paid = summary.get("total_paid", 0)
+            if balance > 0 or total_paid <= 0:
+                continue
+            paid_found = True
+            self._create_payment_quote_row(scroll, q, summary)
+
+        if not paid_found:
+            ctk.CTkLabel(
+                scroll, text="Nenhum orçamento quitado ainda.",
+                font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", padx=20, pady=5)
+
+    def _create_payment_quote_row(self, parent, quote, summary):
+        """Cria uma linha de orçamento na aba de pagamentos."""
+        row = ctk.CTkFrame(parent, fg_color=COLORS["card"], corner_radius=8,
+                            border_width=1, border_color=COLORS["border"])
+        row.pack(fill="x", padx=10, pady=3)
+
+        inner = ctk.CTkFrame(row, fg_color="transparent")
+        inner.pack(fill="x", padx=15, pady=10)
+
+        # Info do orçamento
+        left = ctk.CTkFrame(inner, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True)
+
+        client = quote.get("client_name", "Sem nome")
+        qid = quote.get("id", "")
+        ctk.CTkLabel(left, text=f"#{qid} — {client}",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=COLORS["text"]).pack(anchor="w")
+
+        total = summary.get("total", quote.get("total", 0))
+        paid = summary.get("total_paid", 0)
+        balance = summary.get("balance", total)
+        is_paid = balance <= 0 and paid > 0
+
+        detail_text = f"Total: {format_currency(total)}  |  Pago: {format_currency(paid)}  |  Saldo: {format_currency(max(balance, 0))}"
+        ctk.CTkLabel(left, text=detail_text, font=ctk.CTkFont(size=11),
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", pady=(2, 0))
+
+        # Badge de status
+        badge_color = COLORS["success"] if is_paid else COLORS["error"]
+        badge_text = "QUITADO" if is_paid else "DEVEDOR"
+        badge = ctk.CTkLabel(inner, text=badge_text,
+                             font=ctk.CTkFont(size=10, weight="bold"),
+                             text_color="#FFFFFF",
+                             fg_color=badge_color,
+                             corner_radius=6, width=70, height=24)
+        badge.pack(side="right", padx=(10, 0))
 
     def _add_data_table(self, parent, data, keys, headers):
         """Adiciona tabela resumida de dados."""
@@ -421,12 +595,3 @@ class AnalyticsView(ctk.CTkFrame):
             return status_count if status_count else None
         except Exception:
             return None
-
-    def _get_quotes_by_status(self):
-        """Retorna contagem de orçamentos por status."""
-        all_quotes = db.get_all_quotes()
-        status_count = {}
-        for q in all_quotes:
-            s = q.get("status", "draft")
-            status_count[s] = status_count.get(s, 0) + 1
-        return status_count if status_count else None
