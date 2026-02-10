@@ -163,6 +163,12 @@ def init_database():
     except sqlite3.OperationalError:
         pass  # Coluna já existe
     
+    # Migração: adicionar coluna discount_type se não existir
+    try:
+        cursor.execute("ALTER TABLE quotes ADD COLUMN discount_type TEXT DEFAULT 'percentage'")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
+    
     # Migração: remover CHECK constraint de produtos (tipo dinâmico)
     # SQLite não permite ALTER TABLE para remover constraints,
     # mas como criamos a tabela sem o CHECK, novas databases já ficam OK.
@@ -433,7 +439,7 @@ def update_quote(quote_id: int, **kwargs) -> bool:
     allowed_fields = ['client_name', 'client_phone', 'client_address', 'status',
                       'technical_notes', 'contract_terms', 'payment_methods',
                       'scheduled_date', 'total', 'cost_total', 'profit', 'profitability',
-                      'discount_total']
+                      'discount_total', 'discount_type']
     
     fields = []
     values = []
@@ -476,10 +482,11 @@ def recalculate_quote_totals(quote_id: int):
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Buscar desconto total do orçamento
-    cursor.execute("SELECT discount_total FROM quotes WHERE id = ?", (quote_id,))
+    # Buscar desconto total e tipo de desconto do orçamento
+    cursor.execute("SELECT discount_total, discount_type FROM quotes WHERE id = ?", (quote_id,))
     row_quote = cursor.fetchone()
     discount_total = row_quote['discount_total'] if row_quote else 0
+    discount_type = row_quote['discount_type'] if row_quote else 'percentage'
     
     cursor.execute("""
         SELECT COALESCE(SUM(total), 0) as total, 
@@ -491,8 +498,12 @@ def recalculate_quote_totals(quote_id: int):
     subtotal = row['total']  # Total antes do desconto geral
     cost_total = row['cost_total']
     
-    # Aplicar desconto total sobre o subtotal
-    discount_amount = subtotal * (discount_total / 100) if discount_total > 0 else 0
+    # Aplicar desconto total sobre o subtotal (% ou valor fixo)
+    if discount_type == 'value':
+        discount_amount = discount_total if discount_total > 0 else 0
+    else:  # percentage
+        discount_amount = subtotal * (discount_total / 100) if discount_total > 0 else 0
+    
     total = subtotal - discount_amount
     
     profit = total - cost_total
@@ -534,13 +545,23 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
         dobra = get_dobra_value()
         price_per_meter += dobra
     
-    # Calcular total com desconto do item
+    # Calcular total com desconto do item (desconto em reais)
     subtotal = meters * price_per_meter
-    discount_amount = subtotal * (discount / 100) if discount > 0 else 0
+    discount_amount = discount if discount > 0 else 0
     total = subtotal - discount_amount
     
     cost_per_meter = product['cost'] or 0
     cost_total = meters * cost_per_meter
+    
+    # Acessar width/length com segurança (sqlite3.Row não tem .get())
+    try:
+        p_width = product['width'] or 0
+    except (IndexError, KeyError):
+        p_width = 0
+    try:
+        p_length = product['length'] or 0
+    except (IndexError, KeyError):
+        p_length = 0
     
     cursor.execute("""
         INSERT INTO quote_items (quote_id, product_id, product_name, measure, 
@@ -549,7 +570,7 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (quote_id, product_id, product['name'], product['measure'],
           meters, price_per_meter, total, cost_per_meter, cost_total, discount,
-          product.get('width', 0) or 0, product.get('length', 0) or 0))
+          p_width, p_length))
     
     item_id = cursor.lastrowid
     conn.commit()

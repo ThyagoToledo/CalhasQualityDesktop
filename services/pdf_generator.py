@@ -279,7 +279,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             elif measure:
                 product_display += f" ({format_measure(measure)})"
             if item_discount > 0:
-                product_display += f" [-{item_discount:.1f}%]"
+                product_display += f" [-{_fmt_currency(item_discount)}]"
             pdf.cell(col_product, 7, product_display)
 
             # Quantidade
@@ -319,12 +319,20 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
 
         # Calcular subtotal (soma dos itens) e desconto total
         subtotal = sum(item.get('total', 0) for item in items)
-        discount_total_percent = quote.get('discount_total', 0)
-        discount_total_amount = subtotal * (discount_total_percent / 100) if discount_total_percent > 0 else 0
+        discount_total_value = quote.get('discount_total', 0)
+        discount_type = quote.get('discount_type', 'percentage')
+        
+        if discount_type == 'value':
+            discount_total_amount = discount_total_value if discount_total_value > 0 else 0
+            discount_label = "Desconto Total (R$)"
+        else:  # percentage
+            discount_total_amount = subtotal * (discount_total_value / 100) if discount_total_value > 0 else 0
+            discount_label = f"Desconto Total ({discount_total_value:.1f}%)"
+        
         final_total = quote.get('total', 0)
 
         # Mostrar Subtotal se houver desconto total
-        if discount_total_percent > 0:
+        if discount_total_value > 0:
             pdf.set_font('Helvetica', '', 11)
             pdf.set_text_color(*TEXT_DARK)
             pdf.set_xy(margin, y_pos)
@@ -337,7 +345,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             pdf.set_font('Helvetica', '', 11)
             pdf.set_text_color(*TEXT_SECONDARY)
             pdf.set_xy(margin, y_pos)
-            pdf.cell(content_width * 0.5, 7, f"Desconto Total ({discount_total_percent:.1f}%)")
+            pdf.cell(content_width * 0.5, 7, discount_label)
             pdf.set_xy(margin + content_width * 0.5, y_pos)
             pdf.cell(content_width * 0.5, 7, f"- {_fmt_currency(discount_total_amount)}", align='R')
             y_pos += 8

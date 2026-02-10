@@ -412,7 +412,7 @@ class QuotesView(ctk.CTkFrame):
                 product_name = item.get("product_name", "-")
                 item_discount = item.get("discount", 0)
                 if item_discount > 0:
-                    product_name += f" [-{item_discount:.1f}%]"
+                    product_name += f" [-{format_currency(item_discount)}]"
                 
                 vals = [
                     (product_name, 3),
@@ -442,14 +442,21 @@ class QuotesView(ctk.CTkFrame):
         # Calcular subtotal e desconto
         subtotal = sum(item.get('total', 0) for item in items)
         discount_total = quote.get("discount_total", 0)
-        discount_amount = subtotal * (discount_total / 100) if discount_total > 0 else 0
+        discount_type = quote.get("discount_type", "percentage")
+        
+        if discount_type == "value":
+            discount_amount = discount_total if discount_total > 0 else 0
+            discount_label = f"Desconto (R$):"
+        else:  # percentage
+            discount_amount = subtotal * (discount_total / 100) if discount_total > 0 else 0
+            discount_label = f"Desconto ({discount_total:.1f}%):"
         
         total_lines = []
         
         # Se houver desconto total, mostrar subtotal e desconto
         if discount_total > 0:
             total_lines.append(("Subtotal:", format_currency(subtotal), False))
-            total_lines.append((f"Desconto ({discount_total:.1f}%):", f"- {format_currency(discount_amount)}", False))
+            total_lines.append((discount_label, f"- {format_currency(discount_amount)}", False))
         
         total_lines.extend([
             ("Total:", format_currency(quote.get("total", 0)), True),
@@ -849,9 +856,16 @@ class QuotesView(ctk.CTkFrame):
             subtotal = sum(it["total"] for it in items_list)
             try:
                 discount_total = float(discount_total_entry.get() or 0) if 'discount_total_entry' in locals() else 0
+                dtype = discount_type_var.get() if 'discount_type_var' in locals() else "%"
             except:
                 discount_total = 0
-            discount_amount = subtotal * (discount_total / 100)
+                dtype = "%"
+            
+            if dtype == "R$":
+                discount_amount = discount_total
+            else:
+                discount_amount = subtotal * (discount_total / 100)
+            
             total = subtotal - discount_amount
             total_var.set(format_currency(total))
 
@@ -869,7 +883,7 @@ class QuotesView(ctk.CTkFrame):
 
                 item_info = f"  {item['meters']:.2f}m × {format_currency(item['price_per_meter'])}/m"
                 if item.get("discount", 0) > 0:
-                    item_info += f" (-{item['discount']:.1f}%)"
+                    item_info += f" (-{format_currency(item['discount'])})"
                 item_info += f" = {format_currency(item['total'])}"
                 
                 ctk.CTkLabel(
@@ -937,9 +951,9 @@ class QuotesView(ctk.CTkFrame):
         meters_entry.grid(row=0, column=2, sticky="w", padx=(0, 8))
         meters_entry.insert(0, "1")
 
-        ctk.CTkLabel(add_inner, text="Desc%:", font=ctk.CTkFont(size=12),
+        ctk.CTkLabel(add_inner, text="Desc R$:", font=ctk.CTkFont(size=12),
                      text_color=COLORS["text"]).grid(row=0, column=3, sticky="e", padx=(0, 5))
-        discount_entry = ctk.CTkEntry(add_inner, width=60, height=35, font=ctk.CTkFont(size=13))
+        discount_entry = ctk.CTkEntry(add_inner, width=70, height=35, font=ctk.CTkFont(size=13))
         discount_entry.grid(row=0, column=4, sticky="w", padx=(0, 8))
         discount_entry.insert(0, "0")
 
@@ -960,8 +974,8 @@ class QuotesView(ctk.CTkFrame):
             
             try:
                 discount = float(discount_entry.get() or 0)
-                if discount < 0 or discount > 100:
-                    self.app.show_toast("Desconto deve estar entre 0 e 100%.", "warning")
+                if discount < 0:
+                    self.app.show_toast("Desconto não pode ser negativo.", "warning")
                     return
             except ValueError:
                 self.app.show_toast("Valor inválido para desconto.", "warning")
@@ -972,7 +986,10 @@ class QuotesView(ctk.CTkFrame):
                 effective_price += dobra_value
             
             subtotal = meters * effective_price
-            discount_amount = subtotal * (discount / 100)
+            discount_amount = discount  # desconto em reais
+            if discount_amount > subtotal:
+                self.app.show_toast("Desconto não pode ser maior que o subtotal.", "warning")
+                return
             total = subtotal - discount_amount
             
             items_list.append({
@@ -1202,8 +1219,11 @@ class QuotesView(ctk.CTkFrame):
         discount_inner = ctk.CTkFrame(discount_total_frame, fg_color="transparent")
         discount_inner.pack(fill="x", padx=12, pady=10)
         
+        # Toggle entre % e R$
+        discount_type_var = ctk.StringVar(value=existing_quote.get("discount_type", "percentage") if existing_quote else "percentage")
+        
         ctk.CTkLabel(
-            discount_inner, text="Desconto Total (%):",
+            discount_inner, text="Desconto Total:",
             font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
         ).pack(side="left")
 
@@ -1213,14 +1233,39 @@ class QuotesView(ctk.CTkFrame):
         discount_total_entry.pack(side="left", padx=10)
         discount_total_entry.insert(0, str(existing_quote.get("discount_total", 0) if existing_quote else 0))
         
+        # Segmented button para tipo de desconto
+        ctk.CTkSegmentedButton(
+            discount_inner,
+            values=["%", "R$"],
+            variable=discount_type_var,
+            font=ctk.CTkFont(size=12),
+            height=35,
+            width=100,
+            command=lambda v: update_total_with_discount()
+        ).pack(side="left", padx=(0, 10))
+        
         def update_total_with_discount():
             try:
                 disc = float(discount_total_entry.get() or 0)
-                if disc < 0 or disc > 100:
-                    self.app.show_toast("Desconto total deve estar entre 0 e 100%.", "warning")
+                dtype = "percentage" if discount_type_var.get() == "%" else "value"
+                
+                if dtype == "percentage" and (disc < 0 or disc > 100):
+                    self.app.show_toast("Desconto percentual deve estar entre 0 e 100%.", "warning")
                     return
+                elif dtype == "value" and disc < 0:
+                    self.app.show_toast("Desconto em reais não pode ser negativo.", "warning")
+                    return
+                    
                 subtotal = sum(it["total"] for it in items_list)
-                discount_amount = subtotal * (disc / 100)
+                
+                if dtype == "value":
+                    discount_amount = disc
+                    if discount_amount > subtotal:
+                        self.app.show_toast("Desconto não pode ser maior que o subtotal.", "warning")
+                        return
+                else:  # percentage
+                    discount_amount = subtotal * (disc / 100)
+                
                 total = subtotal - discount_amount
                 total_var.set(format_currency(total))
             except ValueError:
@@ -1273,8 +1318,13 @@ class QuotesView(ctk.CTkFrame):
 
             try:
                 discount_total = float(discount_total_entry.get() or 0)
-                if discount_total < 0 or discount_total > 100:
-                    self.app.show_toast("Desconto total deve estar entre 0 e 100%.", "error")
+                discount_type = "percentage" if discount_type_var.get() == "%" else "value"
+                
+                if discount_type == "percentage" and (discount_total < 0 or discount_total > 100):
+                    self.app.show_toast("Desconto percentual deve estar entre 0 e 100%.", "error")
+                    return
+                elif discount_type == "value" and discount_total < 0:
+                    self.app.show_toast("Desconto em reais não pode ser negativo.", "error")
                     return
             except ValueError:
                 self.app.show_toast("Valor inválido para desconto total.", "error")
@@ -1293,6 +1343,7 @@ class QuotesView(ctk.CTkFrame):
                         payment_methods=selected_payments,
                         scheduled_date=sched_entry.get_iso().strip() or None,
                         discount_total=discount_total,
+                        discount_type=discount_type,
                     )
                     # Remover itens antigos e adicionar novos
                     old_items = existing_quote.get("items", [])
@@ -1317,8 +1368,8 @@ class QuotesView(ctk.CTkFrame):
                         payment_methods=selected_payments,
                         scheduled_date=sched_entry.get_iso().strip() or None,
                     )
-                    # Atualizar desconto total
-                    db.update_quote(quote_id, discount_total=discount_total)
+                    # Atualizar desconto total e tipo
+                    db.update_quote(quote_id, discount_total=discount_total, discount_type=discount_type)
                     
                     for item in items_list:
                         db.add_quote_item(
