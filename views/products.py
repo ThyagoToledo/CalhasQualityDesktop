@@ -555,7 +555,6 @@ class ProductsView(ctk.CTkFrame):
             {"key": "type", "label": "Tipo", "type": "option",
              "options": type_keys, "required": True},
             {"key": "width", "label": "Largura (cm)", "type": "number", "required": True},
-            {"key": "length", "label": "Comprimento (cm)", "type": "number", "required": True},
             {"key": "price_per_meter", "label": "Preço por metro (R$)", "type": "number", "required": True},
             {"key": "cost", "label": "Custo por metro (R$)", "type": "number"},
             {"key": "has_dobra", "label": "Dobra", "type": "option", "options": ["0", "1"],
@@ -578,7 +577,6 @@ class ProductsView(ctk.CTkFrame):
         try:
             price = float(data.get("price_per_meter", 0) or 0)
             width = float(data.get("width", 0) or 0)
-            length = float(data.get("length", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
             has_dobra = int(data.get("has_dobra", 0) or 0)
             if price <= 0 or width <= 0:
@@ -592,7 +590,7 @@ class ProductsView(ctk.CTkFrame):
                 cost=cost,
                 description=data.get("description", ""),
                 width=width,
-                length=length,
+                length=0,
             )
             # Atualizar dobra separadamente
             products = db.get_all_products(search=name)
@@ -615,7 +613,6 @@ class ProductsView(ctk.CTkFrame):
         try:
             price = float(data.get("price_per_meter", 0) or 0)
             width = float(data.get("width", 0) or 0)
-            length = float(data.get("length", 0) or 0)
             cost = float(data.get("cost", 0) or 0)
             has_dobra = int(data.get("has_dobra", 0) or 0)
             db.update_product(
@@ -628,7 +625,7 @@ class ProductsView(ctk.CTkFrame):
                 has_dobra=has_dobra,
                 description=data.get("description", ""),
                 width=width,
-                length=length,
+                length=0,
             )
             self.app.show_toast("Produto atualizado!", "success")
             self._load_products()

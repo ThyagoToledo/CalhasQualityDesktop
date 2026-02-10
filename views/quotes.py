@@ -998,7 +998,7 @@ class QuotesView(ctk.CTkFrame):
                 "product_name": product["name"] + (" (c/ dobra)" if product.get("has_dobra") else ""),
                 "measure": product["measure"],
                 "width": product.get("width", 0),
-                "length": product.get("length", 0),
+                "length": 0,
                 "meters": meters,
                 "price_per_meter": effective_price,
                 "discount": discount,
@@ -1053,20 +1053,11 @@ class QuotesView(ctk.CTkFrame):
             ctk.CTkOptionMenu(pscroll, values=type_keys, variable=np_type_var,
                               font=ctk.CTkFont(size=12), height=35).pack(fill="x", pady=(2, 8))
             
-            # Largura e Comprimento
-            dims_frame = ctk.CTkFrame(pscroll, fg_color="transparent")
-            dims_frame.pack(fill="x", pady=(0, 8))
-            dims_frame.grid_columnconfigure((0, 1), weight=1)
-            
-            ctk.CTkLabel(dims_frame, text="Largura (cm) *", font=ctk.CTkFont(size=12, weight="bold"),
-                         text_color=COLORS["text"]).grid(row=0, column=0, sticky="w")
-            np_width = ctk.CTkEntry(dims_frame, height=35, font=ctk.CTkFont(size=13))
-            np_width.grid(row=1, column=0, sticky="ew", padx=(0, 5))
-            
-            ctk.CTkLabel(dims_frame, text="Comprimento (cm)", font=ctk.CTkFont(size=12, weight="bold"),
-                         text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(5, 0))
-            np_length = ctk.CTkEntry(dims_frame, height=35, font=ctk.CTkFont(size=13))
-            np_length.grid(row=1, column=1, sticky="ew", padx=(5, 0))
+            # Largura
+            ctk.CTkLabel(pscroll, text="Largura (cm) *", font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color=COLORS["text"]).pack(anchor="w")
+            np_width = ctk.CTkEntry(pscroll, height=35, font=ctk.CTkFont(size=13))
+            np_width.pack(fill="x", pady=(2, 8))
             
             # Preço e Custo
             price_frame = ctk.CTkFrame(pscroll, fg_color="transparent")
@@ -1096,7 +1087,6 @@ class QuotesView(ctk.CTkFrame):
                     return
                 try:
                     p_width = float(np_width.get() or 0)
-                    p_length = float(np_length.get() or 0)
                     p_price = float(np_price.get() or 0)
                     p_cost = float(np_cost.get() or 0)
                     if p_price <= 0 or p_width <= 0:
@@ -1110,7 +1100,7 @@ class QuotesView(ctk.CTkFrame):
                         cost=p_cost,
                         description=np_desc.get("1.0", "end-1c").strip(),
                         width=p_width,
-                        length=p_length,
+                        length=0,
                     )
                     self.app.show_toast("Produto criado!", "success")
                     prod_dialog.destroy()
