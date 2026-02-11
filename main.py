@@ -104,6 +104,12 @@ class CalhaGestApp(ctk.CTk):
         elif view_name == "installations":
             from views.installations import InstallationsView
             view = InstallationsView(self.content_frame, self)
+        elif view_name == "expenses":
+            from views.expenses import ExpensesView
+            view = ExpensesView(self.content_frame, self)
+        elif view_name == "payroll":
+            from views.payroll import PayrollView
+            view = PayrollView(self.content_frame, self)
         elif view_name == "analytics":
             from views.analytics import AnalyticsView
             view = AnalyticsView(self.content_frame, self)

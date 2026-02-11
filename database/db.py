@@ -280,6 +280,48 @@ def init_database():
         )
     """)
     
+    # Tabela de Despesas
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'geral',
+            amount REAL NOT NULL,
+            expense_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Tabela de Funcionários
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            role TEXT,
+            phone TEXT,
+            salary REAL DEFAULT 0,
+            active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Tabela de Pagamentos de Folha (payroll)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payroll (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            reference_month TEXT NOT NULL,
+            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        )
+    """)
+
     # Inserir configurações padrão se não existir
     cursor.execute("SELECT COUNT(*) FROM settings")
     if cursor.fetchone()[0] == 0:
@@ -1247,6 +1289,307 @@ def get_monthly_analytics() -> List[Dict]:
     analytics = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return analytics
+
+
+# ============== CRUD de Despesas ==============
+
+def create_expense(description: str, category: str, amount: float,
+                   expense_date: str = None, notes: str = "") -> int:
+    """Cria uma nova despesa."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if not expense_date:
+        expense_date = datetime.now().isoformat()
+    cursor.execute("""
+        INSERT INTO expenses (description, category, amount, expense_date, notes)
+        VALUES (?, ?, ?, ?, ?)
+    """, (description, category, amount, expense_date, notes))
+    expense_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    _auto_backup()
+    return expense_id
+
+
+def get_all_expenses(search: str = "", category_filter: str = "") -> List[Dict]:
+    """Retorna todas as despesas."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT * FROM expenses WHERE 1=1"
+    params = []
+    if search:
+        query += " AND description LIKE ?"
+        params.append(f"%{search}%")
+    if category_filter:
+        query += " AND category = ?"
+        params.append(category_filter)
+    query += " ORDER BY expense_date DESC"
+    cursor.execute(query, params)
+    expenses = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return expenses
+
+
+def update_expense(expense_id: int, **kwargs) -> bool:
+    """Atualiza uma despesa existente."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    allowed = ['description', 'category', 'amount', 'expense_date', 'notes']
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        if k in allowed:
+            fields.append(f"{k} = ?")
+            values.append(v)
+    if not fields:
+        return False
+    fields.append("updated_at = ?")
+    values.append(datetime.now().isoformat())
+    values.append(expense_id)
+    cursor.execute(f"UPDATE expenses SET {', '.join(fields)} WHERE id = ?", values)
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+def delete_expense(expense_id: int) -> bool:
+    """Exclui uma despesa."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+def get_expenses_summary() -> Dict:
+    """Retorna resumo de despesas."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    # Total geral
+    cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM expenses")
+    total = cursor.fetchone()[0]
+    # Total mês atual
+    cursor.execute("""
+        SELECT COALESCE(SUM(amount), 0) FROM expenses
+        WHERE strftime('%Y-%m', expense_date) = strftime('%Y-%m', 'now')
+    """)
+    month_total = cursor.fetchone()[0]
+    # Por categoria
+    cursor.execute("""
+        SELECT category, COALESCE(SUM(amount), 0) as total
+        FROM expenses GROUP BY category ORDER BY total DESC
+    """)
+    by_category = {row['category']: row['total'] for row in cursor.fetchall()}
+    # Mensal (últimos 12 meses)
+    cursor.execute("""
+        SELECT strftime('%Y-%m', expense_date) as month, COALESCE(SUM(amount), 0) as total
+        FROM expenses
+        WHERE expense_date >= date('now', '-12 months')
+        GROUP BY month ORDER BY month DESC
+    """)
+    monthly = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return {
+        'total': total,
+        'month_total': month_total,
+        'by_category': by_category,
+        'monthly': monthly,
+    }
+
+
+# ============== CRUD de Funcionários ==============
+
+def create_employee(name: str, role: str = "", phone: str = "", salary: float = 0) -> int:
+    """Cria um novo funcionário."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO employees (name, role, phone, salary) VALUES (?, ?, ?, ?)
+    """, (name, role, phone, salary))
+    emp_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    _auto_backup()
+    return emp_id
+
+
+def get_all_employees(active_only: bool = True) -> List[Dict]:
+    """Retorna todos os funcionários."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT * FROM employees"
+    if active_only:
+        query += " WHERE active = 1"
+    query += " ORDER BY name"
+    cursor.execute(query)
+    employees = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return employees
+
+
+def update_employee(employee_id: int, **kwargs) -> bool:
+    """Atualiza um funcionário."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    allowed = ['name', 'role', 'phone', 'salary', 'active']
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        if k in allowed:
+            fields.append(f"{k} = ?")
+            values.append(v)
+    if not fields:
+        return False
+    fields.append("updated_at = ?")
+    values.append(datetime.now().isoformat())
+    values.append(employee_id)
+    cursor.execute(f"UPDATE employees SET {', '.join(fields)} WHERE id = ?", values)
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+def delete_employee(employee_id: int) -> bool:
+    """Exclui um funcionário."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM employees WHERE id = ?", (employee_id,))
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+# ============== CRUD de Folha de Pagamento ==============
+
+def add_payroll(employee_id: int, amount: float, reference_month: str,
+                payment_date: str = None, notes: str = "") -> int:
+    """Registra um pagamento de folha."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if not payment_date:
+        payment_date = datetime.now().isoformat()
+    cursor.execute("""
+        INSERT INTO payroll (employee_id, amount, reference_month, payment_date, notes)
+        VALUES (?, ?, ?, ?, ?)
+    """, (employee_id, amount, reference_month, payment_date, notes))
+    pay_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    _auto_backup()
+    return pay_id
+
+
+def get_payroll_by_employee(employee_id: int) -> List[Dict]:
+    """Retorna todos os pagamentos de folha de um funcionário."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT p.*, e.name as employee_name FROM payroll p
+        JOIN employees e ON p.employee_id = e.id
+        WHERE p.employee_id = ? ORDER BY p.reference_month DESC
+    """, (employee_id,))
+    records = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return records
+
+
+def get_all_payroll(month_filter: str = "") -> List[Dict]:
+    """Retorna todos os pagamentos de folha."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT p.*, e.name as employee_name, e.role as employee_role
+        FROM payroll p
+        JOIN employees e ON p.employee_id = e.id
+    """
+    params = []
+    if month_filter:
+        query += " WHERE p.reference_month = ?"
+        params.append(month_filter)
+    query += " ORDER BY p.reference_month DESC, e.name"
+    cursor.execute(query, params)
+    records = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return records
+
+
+def delete_payroll(payroll_id: int) -> bool:
+    """Remove um pagamento de folha."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM payroll WHERE id = ?", (payroll_id,))
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+def get_payroll_summary() -> Dict:
+    """Retorna resumo da folha de pagamento."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    # Total geral pago
+    cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payroll")
+    total = cursor.fetchone()[0]
+    # Total mês atual
+    cursor.execute("""
+        SELECT COALESCE(SUM(amount), 0) FROM payroll
+        WHERE reference_month = strftime('%Y-%m', 'now')
+    """)
+    month_total = cursor.fetchone()[0]
+    # Total de funcionários ativos
+    cursor.execute("SELECT COUNT(*) FROM employees WHERE active = 1")
+    active_employees = cursor.fetchone()[0]
+    # Folha mensal prevista (soma dos salários dos ativos)
+    cursor.execute("SELECT COALESCE(SUM(salary), 0) FROM employees WHERE active = 1")
+    expected_monthly = cursor.fetchone()[0]
+    conn.close()
+    return {
+        'total_paid': total,
+        'month_total': month_total,
+        'active_employees': active_employees,
+        'expected_monthly': expected_monthly,
+    }
+
+
+def get_financial_overview() -> Dict:
+    """Retorna visão geral financeira combinando receitas, despesas e folha."""
+    stats = get_dashboard_stats()
+    expenses_summary = get_expenses_summary()
+    payroll_summary = get_payroll_summary()
+    
+    total_income = stats.get('total_received', 0)
+    total_expenses = expenses_summary.get('total', 0)
+    total_payroll = payroll_summary.get('total_paid', 0)
+    total_outflow = total_expenses + total_payroll
+    balance = total_income - total_outflow
+    
+    return {
+        'total_income': total_income,
+        'total_expenses': total_expenses,
+        'total_payroll': total_payroll,
+        'total_outflow': total_outflow,
+        'balance': balance,
+        'pending_receivables': stats.get('total_pending', 0),
+        'expenses_by_category': expenses_summary.get('by_category', {}),
+        'expenses_month': expenses_summary.get('month_total', 0),
+        'payroll_month': payroll_summary.get('month_total', 0),
+    }
 
 
 # Inicializar banco ao importar o módulo

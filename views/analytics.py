@@ -80,6 +80,31 @@ class AnalyticsView(ctk.CTkFrame):
             ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=16, weight="bold"),
                          text_color=color).pack(pady=(2, 0))
 
+        # Cards financeiros (terceira linha)
+        try:
+            fin = db.get_financial_overview()
+            fin_grid = ctk.CTkFrame(summary, fg_color="transparent")
+            fin_grid.pack(fill="x", padx=15, pady=(0, 15))
+            fin_grid.grid_columnconfigure((0, 1, 2, 3), weight=1)
+
+            fin_items = [
+                ("💸 Despesas", format_currency(fin.get("total_expenses", 0)), COLORS["error"]),
+                ("👥 Folha Pgto", format_currency(fin.get("total_payroll", 0)), COLORS["warning"]),
+                ("📊 Balanço", format_currency(fin.get("balance", 0)),
+                 COLORS["success"] if fin.get("balance", 0) >= 0 else COLORS["error"]),
+                ("📛 Pendentes", format_currency(fin.get("pending_receivables", 0)), COLORS["primary"]),
+            ]
+            for col, (label, value, color) in enumerate(fin_items):
+                cell = ctk.CTkFrame(fin_grid, fg_color="transparent")
+                cell.grid(row=0, column=col, padx=8, sticky="nsew")
+                ctk.CTkFrame(cell, height=3, fg_color=color, corner_radius=2).pack(fill="x", pady=(0, 8))
+                ctk.CTkLabel(cell, text=label, font=ctk.CTkFont(size=11),
+                             text_color=COLORS["text_secondary"]).pack()
+                ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=16, weight="bold"),
+                             text_color=color).pack(pady=(2, 0))
+        except Exception:
+            pass
+
         # Filtro de período
         filter_frame = ctk.CTkFrame(self, fg_color="transparent")
         filter_frame.pack(fill="x", pady=(0, 10))
@@ -127,6 +152,7 @@ class AnalyticsView(ctk.CTkFrame):
         tab_revenue = self.tabview.add("💰 Faturamento vs Custo")
         tab_evolution = self.tabview.add("📈 Evolução Financeira")
         tab_status = self.tabview.add("📋 Orçamentos por Status")
+        tab_financial = self.tabview.add("🥧 Visão Financeira")
         tab_payments = self.tabview.add("💵 Pagamentos")
         tab_overview = self.tabview.add("📊 Visão Geral")
 
@@ -147,6 +173,7 @@ class AnalyticsView(ctk.CTkFrame):
         else:
             self._show_no_data(tab_status)
 
+        self._fill_financial_tab(tab_financial)
         self._fill_payments_tab(tab_payments, stats)
         self._fill_overview_tab(tab_overview, analytics, quotes_by_status, stats)
 
@@ -200,7 +227,8 @@ class AnalyticsView(ctk.CTkFrame):
 
         # Remover todas as abas existentes
         for tab_name in ["💰 Faturamento vs Custo", "📈 Evolução Financeira", 
-                         "📋 Orçamentos por Status", "💵 Pagamentos", "📊 Visão Geral"]:
+                         "📋 Orçamentos por Status", "🥧 Visão Financeira",
+                         "💵 Pagamentos", "📊 Visão Geral"]:
             try:
                 self.tabview.delete(tab_name)
             except:
@@ -210,6 +238,7 @@ class AnalyticsView(ctk.CTkFrame):
         tab_revenue = self.tabview.add("💰 Faturamento vs Custo")
         tab_evolution = self.tabview.add("📈 Evolução Financeira")
         tab_status = self.tabview.add("📋 Orçamentos por Status")
+        tab_financial = self.tabview.add("🥧 Visão Financeira")
         tab_payments = self.tabview.add("💵 Pagamentos")
         tab_overview = self.tabview.add("📊 Visão Geral")
         
@@ -226,6 +255,7 @@ class AnalyticsView(ctk.CTkFrame):
         else:
             self._show_no_data(tab_status)
         
+        self._fill_financial_tab(tab_financial)
         self._fill_payments_tab(tab_payments, stats)
         self._fill_overview_tab(tab_overview, analytics, quotes_by_status, stats)
 
@@ -338,6 +368,156 @@ class AnalyticsView(ctk.CTkFrame):
         except Exception as e:
             ctk.CTkLabel(parent, text=f"Erro: {e}", text_color=COLORS["error"]).pack(pady=10)
 
+    def _fill_financial_tab(self, parent):
+        """Aba de visão financeira com gráficos de pizza para receitas, despesas e folha."""
+        try:
+            from analytics.charts import create_pie_chart
+
+            scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+            scroll.pack(fill="both", expand=True)
+
+            overview = db.get_financial_overview()
+
+            # Cards resumo financeiro
+            summary_frame = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=10,
+                                          border_width=1, border_color=COLORS["border"])
+            summary_frame.pack(fill="x", padx=10, pady=(10, 15))
+
+            sgrid = ctk.CTkFrame(summary_frame, fg_color="transparent")
+            sgrid.pack(fill="x", padx=15, pady=15)
+            sgrid.grid_columnconfigure((0, 1, 2, 3, 4), weight=1)
+
+            fin_stats = [
+                ("💵 Recebido", format_currency(overview.get("total_income", 0)), COLORS["success"]),
+                ("💸 Despesas", format_currency(overview.get("total_expenses", 0)), COLORS["error"]),
+                ("👥 Folha", format_currency(overview.get("total_payroll", 0)), COLORS["warning"]),
+                ("📊 Balanço", format_currency(overview.get("balance", 0)),
+                 COLORS["success"] if overview.get("balance", 0) >= 0 else COLORS["error"]),
+                ("📛 Pendentes", format_currency(overview.get("pending_receivables", 0)), COLORS["primary"]),
+            ]
+            for col, (label, value, color) in enumerate(fin_stats):
+                cell = ctk.CTkFrame(sgrid, fg_color="transparent")
+                cell.grid(row=0, column=col, padx=6, sticky="nsew")
+                ctk.CTkFrame(cell, height=3, fg_color=color, corner_radius=2).pack(fill="x", pady=(0, 6))
+                ctk.CTkLabel(cell, text=label, font=ctk.CTkFont(size=10),
+                             text_color=COLORS["text_secondary"]).pack()
+                ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=15, weight="bold"),
+                             text_color=color).pack(pady=(2, 0))
+
+            # Gráfico de pizza: Distribuição de saídas (Despesas vs Folha)
+            total_expenses = overview.get("total_expenses", 0)
+            total_payroll = overview.get("total_payroll", 0)
+            if total_expenses > 0 or total_payroll > 0:
+                ctk.CTkLabel(
+                    scroll, text="Distribuição de Saídas",
+                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+                ).pack(anchor="w", padx=10, pady=(10, 5))
+
+                path_outflow = os.path.join(self._temp_dir, "outflow_pie.png")
+                create_pie_chart(
+                    ["Despesas", "Folha de Pagamento"],
+                    [total_expenses, total_payroll],
+                    title="Saídas: Despesas vs Folha",
+                    output_path=path_outflow,
+                )
+                if os.path.exists(path_outflow):
+                    self._display_chart_image(scroll, path_outflow)
+
+            # Gráfico de pizza: Receita vs Saídas
+            total_income = overview.get("total_income", 0)
+            total_outflow = overview.get("total_outflow", 0)
+            if total_income > 0 or total_outflow > 0:
+                ctk.CTkLabel(
+                    scroll, text="Receita vs Saídas",
+                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+                ).pack(anchor="w", padx=10, pady=(15, 5))
+
+                path_balance = os.path.join(self._temp_dir, "balance_pie.png")
+                labels_balance = ["Receita Recebida", "Despesas + Folha"]
+                values_balance = [total_income, total_outflow]
+                create_pie_chart(
+                    labels_balance, values_balance,
+                    title="Receita vs Total de Saídas",
+                    output_path=path_balance,
+                )
+                if os.path.exists(path_balance):
+                    self._display_chart_image(scroll, path_balance)
+
+            # Gráfico de pizza: Despesas por categoria
+            expenses_by_cat = overview.get("expenses_by_category", {})
+            if expenses_by_cat:
+                ctk.CTkLabel(
+                    scroll, text="Despesas por Categoria",
+                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+                ).pack(anchor="w", padx=10, pady=(15, 5))
+
+                cat_labels_map = {
+                    "geral": "Geral", "equipamento": "Equipamento", "material": "Material",
+                    "transporte": "Transporte", "aluguel": "Aluguel", "manutencao": "Manutenção",
+                    "outros": "Outros",
+                }
+                cat_labels = [cat_labels_map.get(k, k) for k in expenses_by_cat.keys()]
+                cat_values = list(expenses_by_cat.values())
+
+                path_cat = os.path.join(self._temp_dir, "expenses_category_pie.png")
+                create_pie_chart(
+                    cat_labels, cat_values,
+                    title="Despesas por Categoria",
+                    output_path=path_cat,
+                )
+                if os.path.exists(path_cat):
+                    self._display_chart_image(scroll, path_cat)
+
+            # Gráfico de pizza: Orçamentos por status
+            quotes_by_status = self._get_quotes_by_status()
+            if quotes_by_status:
+                ctk.CTkLabel(
+                    scroll, text="Orçamentos por Status",
+                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+                ).pack(anchor="w", padx=10, pady=(15, 5))
+
+                status_labels_map = {
+                    'draft': 'Rascunho', 'sent': 'Enviado',
+                    'approved': 'Aprovado', 'completed': 'Concluído',
+                }
+                s_labels = [status_labels_map.get(k, k) for k in quotes_by_status.keys()]
+                s_values = list(quotes_by_status.values())
+
+                path_status = os.path.join(self._temp_dir, "status_pie.png")
+                create_pie_chart(
+                    s_labels, s_values,
+                    title="Orçamentos por Status",
+                    output_path=path_status,
+                )
+                if os.path.exists(path_status):
+                    self._display_chart_image(scroll, path_status)
+
+            # Resumo mensal: Este mês
+            ctk.CTkLabel(
+                scroll, text="Resumo do Mês Atual",
+                font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+            ).pack(anchor="w", padx=10, pady=(15, 5))
+
+            month_metrics = [
+                ("Despesas do Mês", format_currency(overview.get("expenses_month", 0)), COLORS["error"]),
+                ("Folha do Mês", format_currency(overview.get("payroll_month", 0)), COLORS["warning"]),
+            ]
+            for label, value, color in month_metrics:
+                row = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=8,
+                                    border_width=1, border_color=COLORS["border"])
+                row.pack(fill="x", padx=10, pady=2)
+                ri = ctk.CTkFrame(row, fg_color="transparent")
+                ri.pack(fill="x", padx=15, pady=8)
+                ctk.CTkFrame(ri, width=4, height=25, corner_radius=2,
+                             fg_color=color).pack(side="left", padx=(0, 10))
+                ctk.CTkLabel(ri, text=label, font=ctk.CTkFont(size=13),
+                             text_color=COLORS["text"]).pack(side="left")
+                ctk.CTkLabel(ri, text=value, font=ctk.CTkFont(size=14, weight="bold"),
+                             text_color=color).pack(side="right")
+
+        except Exception as e:
+            ctk.CTkLabel(parent, text=f"Erro: {e}", text_color=COLORS["error"]).pack(pady=10)
+
     def _fill_overview_tab(self, parent, analytics_data, quotes_data, stats=None):
         """Aba de visão geral com todos os dados resumidos."""
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
@@ -375,6 +555,18 @@ class AnalyticsView(ctk.CTkFrame):
             ("📛 Saldo Devedor Total", format_currency(stats.get("total_pending", 0)), COLORS["error"]),
             ("✅ Orçamentos Quitados", str(stats.get("paid_quotes", 0)), COLORS["primary"]),
         ]
+
+        # Adicionar métricas financeiras (despesas e folha)
+        try:
+            fin = db.get_financial_overview()
+            metrics += [
+                ("💸 Total Despesas", format_currency(fin.get("total_expenses", 0)), COLORS["error"]),
+                ("👥 Total Folha", format_currency(fin.get("total_payroll", 0)), COLORS["warning"]),
+                ("📊 Balanço Geral", format_currency(fin.get("balance", 0)),
+                 COLORS["success"] if fin.get("balance", 0) >= 0 else COLORS["error"]),
+            ]
+        except Exception:
+            pass
 
         if metrics:
             for label, value, color in metrics:

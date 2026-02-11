@@ -17,6 +17,8 @@ class Sidebar(ctk.CTkFrame):
         ("quotes", "📋", "Orçamentos"),
         ("inventory", "🏗️", "Estoque"),
         ("installations", "📅", "Instalações"),
+        ("expenses", "💸", "Despesas"),
+        ("payroll", "👥", "Folha Pgto"),
         ("analytics", "📈", "Relatórios"),
     ]
 

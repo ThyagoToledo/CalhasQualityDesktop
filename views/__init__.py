@@ -7,6 +7,8 @@ from .installations import InstallationsView
 from .inventory import InventoryView
 from .analytics import AnalyticsView
 from .settings import SettingsView
+from .expenses import ExpensesView
+from .payroll import PayrollView
 
 __all__ = [
     'DashboardView',
@@ -16,4 +18,6 @@ __all__ = [
     'InventoryView',
     'AnalyticsView',
     'SettingsView',
+    'ExpensesView',
+    'PayrollView',
 ]

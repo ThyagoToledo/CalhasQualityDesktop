@@ -382,6 +382,13 @@ class QuotesView(ctk.CTkFrame):
                 command=lambda: self._open_edit_form(quote["id"]),
             ).pack(side="left", padx=5)
 
+            ctk.CTkButton(
+                action_inner, text="📋 Clonar Orçamento", font=ctk.CTkFont(size=13),
+                fg_color="#8b5cf6", hover_color="#7c3aed",
+                height=36, corner_radius=8,
+                command=lambda: self._clone_quote_dialog(quote),
+            ).pack(side="left", padx=5)
+
         # Info do cliente
         client_card = ctk.CTkFrame(scroll, fg_color=COLORS["card"], corner_radius=10,
                                     border_width=1, border_color=COLORS["border"])
@@ -1503,6 +1510,152 @@ class QuotesView(ctk.CTkFrame):
             fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             width=180, height=38, corner_radius=10,
             command=save_quote,
+        ).pack(side="right")
+
+    # ========== Clone (Clonar) orçamento com transferência de itens ==========
+
+    def _clone_quote_dialog(self, quote):
+        """Abre dialog para clonar orçamento, permitindo recortar itens para o novo."""
+        items = quote.get("items", [])
+        quote_id = quote["id"]
+
+        dialog = ctk.CTkToplevel(self.app)
+        dialog.title(f"Clonar Orçamento #{quote_id:05d}")
+        dialog.geometry("550x500")
+        dialog.grab_set()
+        dialog.transient(self.app)
+
+        dialog.update_idletasks()
+        x = self.app.winfo_rootx() + (self.app.winfo_width() - 550) // 2
+        y = self.app.winfo_rooty() + (self.app.winfo_height() - 500) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+        scroll = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=20, pady=10)
+
+        ctk.CTkLabel(
+            scroll, text="📋 Clonar Orçamento",
+            font=ctk.CTkFont(size=18, weight="bold"), text_color=COLORS["text"],
+        ).pack(anchor="w", pady=(0, 5))
+
+        ctk.CTkLabel(
+            scroll,
+            text=f"Cliente: {quote.get('client_name', '-')}\n"
+                 f"O novo orçamento será criado com os mesmos dados do cliente.\n"
+                 f"Selecione os itens que deseja MOVER para o novo orçamento\n"
+                 f"(serão removidos do orçamento atual).",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["text_secondary"],
+            justify="left", wraplength=480,
+        ).pack(anchor="w", pady=(0, 12))
+
+        # Checkboxes para itens
+        item_vars = {}
+        if items:
+            ctk.CTkLabel(
+                scroll, text="Selecione itens para transferir:",
+                font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+            ).pack(anchor="w", pady=(0, 8))
+
+            for item in items:
+                var = ctk.BooleanVar(value=False)
+                item_id = item.get("id")
+                item_vars[item_id] = var
+
+                pricing_u = item.get("pricing_unit", "metro")
+                unit_lbl = "m" if pricing_u == "metro" else "un"
+                label_text = (
+                    f"{item.get('product_name', '-')} — "
+                    f"{item.get('meters', 0):.2f}{unit_lbl} × "
+                    f"{format_currency(item.get('price_per_meter', 0))}/{unit_lbl} = "
+                    f"{format_currency(item.get('total', 0))}"
+                )
+                chk = ctk.CTkCheckBox(
+                    scroll, text=label_text, variable=var,
+                    font=ctk.CTkFont(size=12),
+                    checkbox_height=22, checkbox_width=22,
+                    corner_radius=6, border_width=2,
+                    fg_color=get_color("primary"),
+                    hover_color=get_color("primary_hover"),
+                    text_color=get_color("text"),
+                )
+                chk.pack(anchor="w", pady=3)
+        else:
+            ctk.CTkLabel(
+                scroll, text="Este orçamento não possui itens para transferir.",
+                font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", pady=10)
+
+        # Tipo do novo orçamento
+        ctk.CTkLabel(
+            scroll, text="Tipo do novo orçamento:",
+            font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
+        ).pack(anchor="w", pady=(15, 5))
+
+        new_type_var = ctk.StringVar(value=quote.get("quote_type", "instalado") or "instalado")
+        type_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        type_frame.pack(anchor="w")
+        ctk.CTkRadioButton(type_frame, text="Instalado", variable=new_type_var,
+                           value="instalado", font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 20))
+        ctk.CTkRadioButton(type_frame, text="Não Instalado", variable=new_type_var,
+                           value="nao_instalado", font=ctk.CTkFont(size=12)).pack(side="left")
+
+        # Botões
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkButton(
+            btn_frame, text="Cancelar", font=ctk.CTkFont(size=13),
+            fg_color=get_color("border"), text_color=get_color("text"),
+            hover_color=get_color("border_hover"), width=120, height=38,
+            command=dialog.destroy,
+        ).pack(side="left")
+
+        def do_clone():
+            try:
+                # Criar novo orçamento com mesmos dados do cliente
+                new_quote_id = db.create_quote(
+                    client_name=quote.get("client_name", ""),
+                    client_phone=quote.get("client_phone", "") or "",
+                    client_address=quote.get("client_address", "") or "",
+                    technical_notes=quote.get("technical_notes", "") or "",
+                    contract_terms=quote.get("contract_terms", "") or "",
+                    payment_methods=quote.get("payment_methods", "") or "",
+                    scheduled_date=quote.get("scheduled_date"),
+                )
+                db.update_quote(new_quote_id, quote_type=new_type_var.get())
+
+                # Itens selecionados para transferir (recortar)
+                moved_count = 0
+                for item in items:
+                    item_id = item.get("id")
+                    if item_id and item_vars.get(item_id) and item_vars[item_id].get():
+                        # Adicionar no novo orçamento
+                        db.add_quote_item(
+                            new_quote_id,
+                            item.get("product_id"),
+                            item.get("meters", 0),
+                            discount=item.get("discount", 0),
+                        )
+                        # Remover do orçamento original
+                        db.remove_quote_item(item_id)
+                        moved_count += 1
+
+                dialog.destroy()
+                msg = f"Orçamento #{new_quote_id:05d} criado!"
+                if moved_count > 0:
+                    msg += f" {moved_count} item(ns) transferido(s)."
+                self.app.show_toast(msg, "success")
+                self._show_detail(new_quote_id)
+            except Exception as e:
+                self.app.show_toast(f"Erro ao clonar: {e}", "error")
+
+        ctk.CTkButton(
+            btn_frame, text="📋 Criar Orçamento Clone",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#8b5cf6", hover_color="#7c3aed",
+            width=200, height=38, corner_radius=10,
+            command=do_clone,
         ).pack(side="right")
 
     # ========== Ações ==========
