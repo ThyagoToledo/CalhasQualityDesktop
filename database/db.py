@@ -612,10 +612,12 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
         dobra = get_dobra_value()
         price_per_meter += dobra
     
-    # Calcular total com desconto do item (desconto em reais)
-    subtotal = meters * price_per_meter
+    # Desconto é aplicado no preço unitário (por metro/unidade)
     discount_amount = discount if discount > 0 else 0
-    total = subtotal - discount_amount
+    final_price_per_meter = price_per_meter - discount_amount
+    if final_price_per_meter < 0:
+        final_price_per_meter = 0
+    total = meters * final_price_per_meter
     
     cost_per_meter = product['cost'] or 0
     cost_total = meters * cost_per_meter
@@ -642,7 +644,7 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
                                 width, length, pricing_unit)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (quote_id, product_id, product['name'], product['measure'],
-          meters, price_per_meter, total, cost_per_meter, cost_total, discount,
+          meters, final_price_per_meter, total, cost_per_meter, cost_total, discount,
           p_width, p_length, p_pricing_unit))
     
     item_id = cursor.lastrowid
@@ -692,10 +694,12 @@ def update_quote_item(item_id: int, meters: float = None,
     new_price = custom_price if custom_price is not None else item['price_per_meter']
     new_discount = discount if discount is not None else item['discount']
     
-    # Recalcular total com desconto
-    subtotal = new_meters * new_price
-    discount_amount = subtotal * (new_discount / 100) if new_discount > 0 else 0
-    new_total = subtotal - discount_amount
+    # Desconto é aplicado no preço unitário (por metro/unidade)
+    discount_amount = new_discount if new_discount > 0 else 0
+    final_price_per_unit = new_price - discount_amount
+    if final_price_per_unit < 0:
+        final_price_per_unit = 0
+    new_total = new_meters * final_price_per_unit
     
     # Recalcular custo
     cost_per_meter = item['cost_per_meter'] or 0
@@ -705,7 +709,7 @@ def update_quote_item(item_id: int, meters: float = None,
         UPDATE quote_items 
         SET meters = ?, price_per_meter = ?, discount = ?, total = ?, cost_total = ?
         WHERE id = ?
-    """, (new_meters, new_price, new_discount, new_total, new_cost_total, item_id))
+    """, (new_meters, final_price_per_unit, new_discount, new_total, new_cost_total, item_id))
     
     conn.commit()
     conn.close()

@@ -929,10 +929,10 @@ class QuotesView(ctk.CTkFrame):
 
                 item_pu = item.get('pricing_unit', 'metro')
                 item_unit = 'm' if item_pu == 'metro' else 'un'
-                item_info = f"  {item['meters']:.2f}{item_unit} × {format_currency(item['price_per_meter'])}/{item_unit}"
+                price_display = format_currency(item['price_per_meter'])
                 if item.get("discount", 0) > 0:
-                    item_info += f" (-{format_currency(item['discount'])})"
-                item_info += f" = {format_currency(item['total'])}"
+                    price_display = f"{format_currency(item['price_per_meter'])} (desc -{format_currency(item['discount'])}/{item_unit})"
+                item_info = f"  {item['meters']:.2f}{item_unit} × {price_display} = {format_currency(item['total'])}"
                 
                 ctk.CTkLabel(
                     inner, text=item_info,
@@ -1083,12 +1083,13 @@ class QuotesView(ctk.CTkFrame):
             if product.get("has_dobra"):
                 effective_price += dobra_value
             
-            subtotal = qty * effective_price
-            discount_amount = discount  # desconto em reais
-            if discount_amount > subtotal:
-                self.app.show_toast("Desconto não pode ser maior que o subtotal.", "warning")
+            # Desconto é aplicado no preço unitário (por metro/unidade)
+            discount_amount = discount  # desconto em reais por metro/unidade
+            if discount_amount > effective_price:
+                self.app.show_toast("Desconto não pode ser maior que o preço unitário.", "warning")
                 return
-            total = subtotal - discount_amount
+            final_price = effective_price - discount_amount
+            total = qty * final_price
             
             unit_label = "m" if pricing_unit == 'metro' else "un"
             display_name = product["name"] + (" (c/ dobra)" if product.get("has_dobra") else "")
@@ -1101,7 +1102,7 @@ class QuotesView(ctk.CTkFrame):
                 "width": product.get("width", 0),
                 "length": 0,
                 "meters": qty,
-                "price_per_meter": effective_price,
+                "price_per_meter": final_price,
                 "discount": discount,
                 "total": total,
                 "pricing_unit": pricing_unit,

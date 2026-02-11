@@ -771,10 +771,104 @@ class AnalyticsView(ctk.CTkFrame):
                                             border_width=1, border_color=COLORS["border"])
             chart_container.pack(padx=10, pady=5)
 
+            # Header com botão expandir
+            header_frame = ctk.CTkFrame(chart_container, fg_color="transparent")
+            header_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+            ctk.CTkButton(
+                header_frame, text="🔍 Expandir Gráfico",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+                height=28, width=140, corner_radius=6,
+                command=lambda path=image_path: self._expand_chart(path),
+            ).pack(side="right")
+
             label = ctk.CTkLabel(chart_container, image=ctk_img, text="")
-            label.pack(padx=10, pady=10)
+            label.pack(padx=10, pady=(5, 10))
         except Exception:
             pass
+
+    def _expand_chart(self, image_path):
+        """Abre o gráfico em uma janela maximizada."""
+        try:
+            from PIL import Image
+            
+            dialog = ctk.CTkToplevel(self.app)
+            dialog.title("Visualização de Gráfico")
+            dialog.attributes('-topmost', True)
+            
+            # Obter dimensões da tela
+            screen_width = dialog.winfo_screenwidth()
+            screen_height = dialog.winfo_screenheight()
+            
+            # Definir tamanho da janela (90% da tela)
+            window_width = int(screen_width * 0.9)
+            window_height = int(screen_height * 0.9)
+            
+            # Centralizar
+            x = (screen_width - window_width) // 2
+            y = (screen_height - window_height) // 2
+            
+            dialog.geometry(f"{window_width}x{window_height}+{x}+{y}")
+            
+            # Frame principal
+            main_frame = ctk.CTkFrame(dialog, fg_color=COLORS["bg"])
+            main_frame.pack(fill="both", expand=True)
+            
+            # Header com botão fechar
+            header = ctk.CTkFrame(main_frame, fg_color=COLORS["card"], height=50)
+            header.pack(fill="x", padx=10, pady=(10, 5))
+            header.pack_propagate(False)
+            
+            ctk.CTkLabel(
+                header, text="📊 Visualização em Tela Cheia",
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color=COLORS["text"],
+            ).pack(side="left", padx=15)
+            
+            ctk.CTkButton(
+                header, text="✕ Fechar", 
+                font=ctk.CTkFont(size=12, weight="bold"),
+                fg_color=COLORS["error"], hover_color=COLORS["error_hover"],
+                height=32, width=100, corner_radius=6,
+                command=dialog.destroy,
+            ).pack(side="right", padx=15)
+            
+            # Container do gráfico com scroll
+            scroll_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+            scroll_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+            
+            # Carregar e exibir imagem em alta resolução
+            img = Image.open(image_path)
+            
+            # Calcular tamanho máximo mantendo aspect ratio
+            available_width = window_width - 60
+            available_height = window_height - 150
+            
+            ratio = min(available_width / img.width, available_height / img.height)
+            new_width = int(img.width * ratio)
+            new_height = int(img.height * ratio)
+            
+            # Criar imagem CTk em alta resolução
+            ctk_img_large = ctk.CTkImage(img, size=(new_width, new_height))
+            
+            # Container centralizado para a imagem
+            img_container = ctk.CTkFrame(scroll_frame, fg_color=COLORS["card"],
+                                          corner_radius=12, border_width=1,
+                                          border_color=COLORS["border"])
+            img_container.pack(expand=True, padx=20, pady=20)
+            
+            label = ctk.CTkLabel(img_container, image=ctk_img_large, text="")
+            label.pack(padx=20, pady=20)
+            
+            # Manter referência da imagem
+            label._img_ref = ctk_img_large
+            
+            # Atalho ESC para fechar
+            dialog.bind('<Escape>', lambda e: dialog.destroy())
+            
+        except Exception as e:
+            self.app.show_toast(f"Erro ao expandir gráfico: {e}", "error")
 
     def _get_quotes_by_status(self):
         """Obtém contagem de orçamentos por status."""
