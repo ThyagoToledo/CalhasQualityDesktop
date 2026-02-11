@@ -449,13 +449,13 @@ class ExpensesView(ctk.CTkFrame):
         """Formulário para criar/editar categoria."""
         form = ctk.CTkToplevel(parent_dialog)
         form.title("Editar Categoria" if existing else "Nova Categoria")
-        form.geometry("400x300")
+        form.geometry("800x600")
         form.grab_set()
         form.transient(parent_dialog)
 
         form.update_idletasks()
-        x = parent_dialog.winfo_x() + (parent_dialog.winfo_width() - 400) // 2
-        y = parent_dialog.winfo_y() + (parent_dialog.winfo_height() - 300) // 2
+        x = parent_dialog.winfo_x() + (parent_dialog.winfo_width() - 800) // 2
+        y = parent_dialog.winfo_y() + (parent_dialog.winfo_height() - 600) // 2
         form.geometry(f"+{x}+{y}")
 
         content = ctk.CTkFrame(form, fg_color="transparent")
@@ -490,18 +490,72 @@ class ExpensesView(ctk.CTkFrame):
 
         # Color
         ctk.CTkLabel(
-            content, text="Cor (hexadecimal) *",
+            content, text="Cor *",
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=COLORS["text"],
-        ).pack(anchor="w")
-        color_entry = ctk.CTkEntry(content, height=35, font=ctk.CTkFont(size=13),
-                                   placeholder_text="#6b7280")
-        color_entry.pack(fill="x", pady=(2, 12))
+        ).pack(anchor="w", pady=(8, 5))
+
+        # Variável para armazenar cor selecionada
+        selected_color = ctk.StringVar(value=existing['color'] if existing else "#6b7280")
+
+        # Container do seletor de cor
+        color_container = ctk.CTkFrame(content, fg_color=COLORS["card"],
+                                       corner_radius=10, border_width=1,
+                                       border_color=COLORS["border"])
+        color_container.pack(fill="x", pady=(0, 12))
+
+        # Preview da cor selecionada
+        color_preview_frame = ctk.CTkFrame(color_container, fg_color="transparent")
+        color_preview_frame.pack(fill="x", padx=15, pady=12)
+
+        color_preview = ctk.CTkFrame(color_preview_frame,
+                                     fg_color=selected_color.get(),
+                                     width=60, height=60,
+                                     corner_radius=8,
+                                     border_width=2,
+                                     border_color=COLORS["border"])
+        color_preview.pack(side="left", padx=(0, 15))
+        color_preview.pack_propagate(False)
+
+        # Info da cor
+        color_info_frame = ctk.CTkFrame(color_preview_frame, fg_color="transparent")
+        color_info_frame.pack(side="left", fill="both", expand=True)
+
+        color_label = ctk.CTkLabel(color_info_frame,
+                                   text=selected_color.get(),
+                                   font=ctk.CTkFont(size=16, weight="bold"),
+                                   text_color=COLORS["text"])
+        color_label.pack(anchor="w")
+
+        ctk.CTkLabel(color_info_frame,
+                    text="Clique no botão abaixo para escolher uma cor",
+                    font=ctk.CTkFont(size=11),
+                    text_color=COLORS["text_secondary"]).pack(anchor="w", pady=(2, 0))
+
+        def open_color_picker():
+            try:
+                from tkcolorpicker import askcolor
+                color_result = askcolor(selected_color.get(), form, title="Escolher Cor")
+                if color_result and color_result[1]:
+                    new_color = color_result[1]
+                    selected_color.set(new_color)
+                    color_preview.configure(fg_color=new_color)
+                    color_label.configure(text=new_color)
+            except ImportError:
+                # Fallback para palleta de cores simples se tkcolorpicker não estiver disponível
+                self._show_color_palette(form, selected_color, color_preview, color_label)
+
+        ctk.CTkButton(
+            color_preview_frame, text="🎨 Escolher Cor",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+            height=35, width=150, corner_radius=8,
+            command=open_color_picker,
+        ).pack(side="right")
 
         # Preencher se edição
         if existing:
             label_entry.insert(0, existing['label'])
-            color_entry.insert(0, existing['color'])
 
         # Buttons
         btn_frame = ctk.CTkFrame(form, fg_color="transparent")
@@ -518,7 +572,7 @@ class ExpensesView(ctk.CTkFrame):
 
         def save():
             label = label_entry.get().strip()
-            color = color_entry.get().strip() or "#6b7280"
+            color = selected_color.get() or "#6b7280"
 
             if not label:
                 self.app.show_toast("Nome é obrigatório.", "error")
@@ -555,6 +609,107 @@ class ExpensesView(ctk.CTkFrame):
             width=150, height=38, corner_radius=10,
             command=save,
         ).pack(side="right")
+
+    def _show_color_palette(self, parent, color_var, preview_frame, label_widget):
+        """Mostra paleta de cores visual quando tkcolorpicker não está disponível."""
+        palette_dialog = ctk.CTkToplevel(parent)
+        palette_dialog.title("Escolher Cor")
+        palette_dialog.geometry("500x450")
+        palette_dialog.grab_set()
+        palette_dialog.transient(parent)
+
+        palette_dialog.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() - 500) // 2
+        y = parent.winfo_y() + (parent.winfo_height() - 450) // 2
+        palette_dialog.geometry(f"+{x}+{y}")
+
+        main_frame = ctk.CTkFrame(palette_dialog, fg_color=COLORS["bg"])
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+            main_frame, text="🎨 Selecione uma Cor",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(anchor="w", pady=(0, 15))
+
+        # Paleta de cores predefinidas
+        colors_palette = [
+            ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e"],
+            ["#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1"],
+            ["#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#fb7185"],
+            ["#64748b", "#6b7280", "#71717a", "#78716c", "#57534e", "#44403c"],
+            ["#dc2626", "#ea580c", "#d97706", "#ca8a04", "#65a30d", "#16a34a"],
+            ["#059669", "#0d9488", "#0891b2", "#0284c7", "#2563eb", "#4f46e5"],
+            ["#7c3aed", "#9333ea", "#c026d3", "#db2777", "#e11d48", "#be123c"],
+            ["#475569", "#52525b", "#737373", "#a8a29e", "#d4d4d8", "#e7e5e4"],
+        ]
+
+        # Grid de cores
+        colors_grid = ctk.CTkFrame(main_frame, fg_color="transparent")
+        colors_grid.pack(fill="both", expand=True, pady=(0, 15))
+
+        for row_idx, color_row in enumerate(colors_palette):
+            row_frame = ctk.CTkFrame(colors_grid, fg_color="transparent")
+            row_frame.pack(fill="x", pady=3)
+            
+            for col_idx, color in enumerate(color_row):
+                def make_callback(c):
+                    return lambda: self._select_color(c, color_var, preview_frame, label_widget, palette_dialog)
+                
+                color_btn = ctk.CTkButton(
+                    row_frame, text="",
+                    fg_color=color,
+                    hover_color=color,
+                    width=70, height=45,
+                    corner_radius=8,
+                    border_width=2,
+                    border_color=COLORS["border"] if color != color_var.get() else "#ffffff",
+                    command=make_callback(color),
+                )
+                color_btn.pack(side="left", padx=3)
+
+        # Input manual
+        manual_frame = ctk.CTkFrame(main_frame, fg_color=COLORS["card"],
+                                    corner_radius=8, border_width=1,
+                                    border_color=COLORS["border"])
+        manual_frame.pack(fill="x", pady=(10, 0))
+        
+        manual_content = ctk.CTkFrame(manual_frame, fg_color="transparent")
+        manual_content.pack(fill="x", padx=12, pady=10)
+
+        ctk.CTkLabel(
+            manual_content, text="Ou digite uma cor hexadecimal:",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["text_secondary"],
+        ).pack(side="left", padx=(0, 10))
+
+        hex_entry = ctk.CTkEntry(manual_content, height=32, width=120,
+                                 font=ctk.CTkFont(size=12),
+                                 placeholder_text="#000000")
+        hex_entry.pack(side="left", padx=(0, 8))
+        hex_entry.insert(0, color_var.get())
+
+        def apply_custom():
+            custom_color = hex_entry.get().strip()
+            if custom_color and custom_color.startswith('#') and len(custom_color) == 7:
+                self._select_color(custom_color, color_var, preview_frame, label_widget, palette_dialog)
+            else:
+                self.app.show_toast("Cor inválida. Use formato #RRGGBB", "error")
+
+        ctk.CTkButton(
+            manual_content, text="Aplicar",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+            width=80, height=32, corner_radius=6,
+            command=apply_custom,
+        ).pack(side="left")
+
+    def _select_color(self, color, color_var, preview_frame, label_widget, dialog):
+        """Seleciona uma cor e atualiza a preview."""
+        color_var.set(color)
+        preview_frame.configure(fg_color=color)
+        label_widget.configure(text=color)
+        dialog.destroy()
 
     def _confirm_delete_category(self, category, reload_callback):
         """Confirma exclusão de categoria."""
