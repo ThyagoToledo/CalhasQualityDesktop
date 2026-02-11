@@ -369,7 +369,7 @@ class AnalyticsView(ctk.CTkFrame):
             ctk.CTkLabel(parent, text=f"Erro: {e}", text_color=COLORS["error"]).pack(pady=10)
 
     def _fill_financial_tab(self, parent):
-        """Aba de visão financeira com gráficos de pizza para receitas, despesas e folha."""
+        """Aba de visão financeira com painel de seleção de gráficos."""
         try:
             from analytics.charts import create_pie_chart
 
@@ -404,15 +404,29 @@ class AnalyticsView(ctk.CTkFrame):
                 ctk.CTkLabel(cell, text=value, font=ctk.CTkFont(size=15, weight="bold"),
                              text_color=color).pack(pady=(2, 0))
 
-            # Gráfico de pizza: Distribuição de saídas (Despesas vs Folha)
+            # Painel de seleção de gráficos
+            ctk.CTkLabel(
+                scroll, text="📊 Galeria de Gráficos",
+                font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["text"],
+            ).pack(anchor="w", padx=10, pady=(20, 10))
+
+            ctk.CTkLabel(
+                scroll, text="Clique em um card para visualizar o gráfico em tela cheia",
+                font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", padx=10, pady=(0, 15))
+
+            # Grid de cards de gráficos
+            charts_grid = ctk.CTkFrame(scroll, fg_color="transparent")
+            charts_grid.pack(fill="x", padx=10, pady=(0, 15))
+            charts_grid.grid_columnconfigure((0, 1), weight=1)
+
+            # Lista de gráficos disponíveis
+            available_charts = []
+
+            # Gráfico: Distribuição de saídas (Despesas vs Folha)
             total_expenses = overview.get("total_expenses", 0)
             total_payroll = overview.get("total_payroll", 0)
             if total_expenses > 0 or total_payroll > 0:
-                ctk.CTkLabel(
-                    scroll, text="Distribuição de Saídas",
-                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
-                ).pack(anchor="w", padx=10, pady=(10, 5))
-
                 path_outflow = os.path.join(self._temp_dir, "outflow_pie.png")
                 create_pie_chart(
                     ["Despesas", "Folha de Pagamento"],
@@ -420,37 +434,36 @@ class AnalyticsView(ctk.CTkFrame):
                     title="Saídas: Despesas vs Folha",
                     output_path=path_outflow,
                 )
-                if os.path.exists(path_outflow):
-                    self._display_chart_image(scroll, path_outflow)
+                available_charts.append({
+                    "title": "Distribuição de Saídas",
+                    "description": "Despesas vs Folha de Pagamento",
+                    "icon": "💸",
+                    "path": path_outflow,
+                    "color": COLORS["error"],
+                })
 
-            # Gráfico de pizza: Receita vs Saídas
+            # Gráfico: Receita vs Saídas
             total_income = overview.get("total_income", 0)
             total_outflow = overview.get("total_outflow", 0)
             if total_income > 0 or total_outflow > 0:
-                ctk.CTkLabel(
-                    scroll, text="Receita vs Saídas",
-                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
-                ).pack(anchor="w", padx=10, pady=(15, 5))
-
                 path_balance = os.path.join(self._temp_dir, "balance_pie.png")
-                labels_balance = ["Receita Recebida", "Despesas + Folha"]
-                values_balance = [total_income, total_outflow]
                 create_pie_chart(
-                    labels_balance, values_balance,
+                    ["Receita Recebida", "Despesas + Folha"],
+                    [total_income, total_outflow],
                     title="Receita vs Total de Saídas",
                     output_path=path_balance,
                 )
-                if os.path.exists(path_balance):
-                    self._display_chart_image(scroll, path_balance)
+                available_charts.append({
+                    "title": "Receita vs Saídas",
+                    "description": "Balanço geral do negócio",
+                    "icon": "💰",
+                    "path": path_balance,
+                    "color": COLORS["success"],
+                })
 
-            # Gráfico de pizza: Despesas por categoria
+            # Gráfico: Despesas por categoria
             expenses_by_cat = overview.get("expenses_by_category", {})
             if expenses_by_cat:
-                ctk.CTkLabel(
-                    scroll, text="Despesas por Categoria",
-                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
-                ).pack(anchor="w", padx=10, pady=(15, 5))
-
                 cat_labels_map = {
                     "geral": "Geral", "equipamento": "Equipamento", "material": "Material",
                     "transporte": "Transporte", "aluguel": "Aluguel", "manutencao": "Manutenção",
@@ -465,17 +478,17 @@ class AnalyticsView(ctk.CTkFrame):
                     title="Despesas por Categoria",
                     output_path=path_cat,
                 )
-                if os.path.exists(path_cat):
-                    self._display_chart_image(scroll, path_cat)
+                available_charts.append({
+                    "title": "Despesas por Categoria",
+                    "description": f"{len(expenses_by_cat)} categorias diferentes",
+                    "icon": "📂",
+                    "path": path_cat,
+                    "color": COLORS["warning"],
+                })
 
-            # Gráfico de pizza: Orçamentos por status
+            # Gráfico: Orçamentos por status
             quotes_by_status = self._get_quotes_by_status()
             if quotes_by_status:
-                ctk.CTkLabel(
-                    scroll, text="Orçamentos por Status",
-                    font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS["text"],
-                ).pack(anchor="w", padx=10, pady=(15, 5))
-
                 status_labels_map = {
                     'draft': 'Rascunho', 'sent': 'Enviado',
                     'approved': 'Aprovado', 'completed': 'Concluído',
@@ -489,8 +502,68 @@ class AnalyticsView(ctk.CTkFrame):
                     title="Orçamentos por Status",
                     output_path=path_status,
                 )
-                if os.path.exists(path_status):
-                    self._display_chart_image(scroll, path_status)
+                available_charts.append({
+                    "title": "Orçamentos por Status",
+                    "description": f"{sum(s_values)} orçamentos no total",
+                    "icon": "📋",
+                    "path": path_status,
+                    "color": COLORS["primary"],
+                })
+
+            # Criar cards clicáveis para cada gráfico
+            for idx, chart in enumerate(available_charts):
+                row = idx // 2
+                col = idx % 2
+
+                card = ctk.CTkButton(
+                    charts_grid,
+                    text="",
+                    fg_color=COLORS["card"],
+                    hover_color=COLORS["border_hover"],
+                    corner_radius=12,
+                    border_width=2,
+                    border_color=chart["color"],
+                    height=120,
+                    command=lambda p=chart["path"], t=chart["title"]: self._expand_chart(p, t),
+                )
+                card.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
+
+                # Conteúdo do card
+                card_content = ctk.CTkFrame(card, fg_color="transparent")
+                card_content.place(relx=0.5, rely=0.5, anchor="center")
+
+                # Ícone grande
+                ctk.CTkLabel(
+                    card_content, text=chart["icon"],
+                    font=ctk.CTkFont(size=40),
+                ).pack(pady=(0, 8))
+
+                # Título
+                ctk.CTkLabel(
+                    card_content, text=chart["title"],
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color=COLORS["text"],
+                ).pack()
+
+                # Descrição
+                ctk.CTkLabel(
+                    card_content, text=chart["description"],
+                    font=ctk.CTkFont(size=11),
+                    text_color=COLORS["text_secondary"],
+                ).pack(pady=(2, 0))
+
+                # Indicador de clique
+                ctk.CTkLabel(
+                    card_content, text="🔍 Clique para ampliar",
+                    font=ctk.CTkFont(size=10),
+                    text_color=chart["color"],
+                ).pack(pady=(8, 0))
+
+            if not available_charts:
+                ctk.CTkLabel(
+                    scroll, text="Nenhum gráfico disponível. Registre despesas, folha e orçamentos.",
+                    font=ctk.CTkFont(size=13), text_color=COLORS["text_secondary"],
+                ).pack(pady=30)
 
             # Resumo mensal: Este mês
             ctk.CTkLabel(
@@ -788,13 +861,13 @@ class AnalyticsView(ctk.CTkFrame):
         except Exception:
             pass
 
-    def _expand_chart(self, image_path):
+    def _expand_chart(self, image_path, chart_title=None):
         """Abre o gráfico em uma janela maximizada."""
         try:
             from PIL import Image
             
             dialog = ctk.CTkToplevel(self.app)
-            dialog.title("Visualização de Gráfico")
+            dialog.title(chart_title or "Visualização de Gráfico")
             dialog.attributes('-topmost', True)
             
             # Obter dimensões da tela
@@ -820,8 +893,9 @@ class AnalyticsView(ctk.CTkFrame):
             header.pack(fill="x", padx=10, pady=(10, 5))
             header.pack_propagate(False)
             
+            title_text = f"📊 {chart_title}" if chart_title else "📊 Visualização em Tela Cheia"
             ctk.CTkLabel(
-                header, text="📊 Visualização em Tela Cheia",
+                header, text=title_text,
                 font=ctk.CTkFont(size=16, weight="bold"),
                 text_color=COLORS["text"],
             ).pack(side="left", padx=15)
