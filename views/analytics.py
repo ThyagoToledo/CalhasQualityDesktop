@@ -520,44 +520,44 @@ class AnalyticsView(ctk.CTkFrame):
                     text="",
                     fg_color=COLORS["card"],
                     hover_color=COLORS["border_hover"],
-                    corner_radius=12,
-                    border_width=2,
+                    corner_radius=10,
+                    border_width=1,
                     border_color=chart["color"],
-                    height=120,
+                    height=95,
                     command=lambda p=chart["path"], t=chart["title"]: self._expand_chart(p, t),
                 )
-                card.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
+                card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
 
                 # Conteúdo do card
                 card_content = ctk.CTkFrame(card, fg_color="transparent")
                 card_content.place(relx=0.5, rely=0.5, anchor="center")
 
-                # Ícone grande
+                # Ícone
                 ctk.CTkLabel(
                     card_content, text=chart["icon"],
-                    font=ctk.CTkFont(size=40),
-                ).pack(pady=(0, 8))
+                    font=ctk.CTkFont(size=28),
+                ).pack(pady=(0, 4))
 
                 # Título
                 ctk.CTkLabel(
                     card_content, text=chart["title"],
-                    font=ctk.CTkFont(size=14, weight="bold"),
+                    font=ctk.CTkFont(size=12, weight="bold"),
                     text_color=COLORS["text"],
                 ).pack()
 
                 # Descrição
                 ctk.CTkLabel(
                     card_content, text=chart["description"],
-                    font=ctk.CTkFont(size=11),
+                    font=ctk.CTkFont(size=9),
                     text_color=COLORS["text_secondary"],
-                ).pack(pady=(2, 0))
+                ).pack(pady=(1, 0))
 
                 # Indicador de clique
                 ctk.CTkLabel(
                     card_content, text="🔍 Clique para ampliar",
-                    font=ctk.CTkFont(size=10),
+                    font=ctk.CTkFont(size=8),
                     text_color=chart["color"],
-                ).pack(pady=(8, 0))
+                ).pack(pady=(4, 0))
 
             if not available_charts:
                 ctk.CTkLabel(

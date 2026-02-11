@@ -294,6 +294,34 @@ def init_database():
         )
     """)
 
+    # Tabela de Categorias de Despesas
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expense_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT UNIQUE NOT NULL,
+            label TEXT NOT NULL,
+            color TEXT DEFAULT '#6b7280',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Popular categorias padrão se não existirem
+    cursor.execute("SELECT COUNT(*) FROM expense_categories")
+    if cursor.fetchone()[0] == 0:
+        default_categories = [
+            ('geral', 'Geral', '#6b7280'),
+            ('equipamento', 'Equipamento', '#2563eb'),
+            ('material', 'Material', '#f59e0b'),
+            ('transporte', 'Transporte', '#8b5cf6'),
+            ('aluguel', 'Aluguel', '#ef4444'),
+            ('manutencao', 'Manutenção', '#10b981'),
+            ('outros', 'Outros', '#ec4899'),
+        ]
+        cursor.executemany(
+            "INSERT INTO expense_categories (key, label, color) VALUES (?, ?, ?)",
+            default_categories
+        )
+
     # Tabela de Funcionários
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS employees (
@@ -1406,6 +1434,87 @@ def get_expenses_summary() -> Dict:
         'by_category': by_category,
         'monthly': monthly,
     }
+
+
+# ============== CRUD de Categorias de Despesas ==============
+
+def get_all_expense_categories() -> List[Dict]:
+    """Retorna todas as categorias de despesas."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, key, label, color, created_at
+        FROM expense_categories
+        ORDER BY label
+    """)
+    categories = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return categories
+
+
+def create_expense_category(key: str, label: str, color: str = '#6b7280') -> int:
+    """Cria uma nova categoria de despesa."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO expense_categories (key, label, color)
+            VALUES (?, ?, ?)
+        """, (key, label, color))
+        cat_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        _auto_backup()
+        return cat_id
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise ValueError("Já existe uma categoria com esta chave.")
+
+
+def update_expense_category(cat_id: int, label: str, color: str) -> bool:
+    """Atualiza uma categoria de despesa."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE expense_categories
+        SET label = ?, color = ?
+        WHERE id = ?
+    """, (label, color, cat_id))
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
+
+
+def delete_expense_category(cat_id: int) -> bool:
+    """Exclui uma categoria de despesa se não estiver em uso."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Verificar se a categoria está em uso
+    cursor.execute("SELECT key FROM expense_categories WHERE id = ?", (cat_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False
+    
+    category_key = row['key']
+    cursor.execute("SELECT COUNT(*) FROM expenses WHERE category = ?", (category_key,))
+    count = cursor.fetchone()[0]
+    
+    if count > 0:
+        conn.close()
+        raise ValueError(f"Não é possível excluir. Existem {count} despesa(s) usando esta categoria.")
+    
+    cursor.execute("DELETE FROM expense_categories WHERE id = ?", (cat_id,))
+    conn.commit()
+    success = cursor.rowcount > 0
+    conn.close()
+    if success:
+        _auto_backup()
+    return success
 
 
 # ============== CRUD de Funcionários ==============

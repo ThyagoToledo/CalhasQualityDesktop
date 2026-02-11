@@ -11,28 +11,6 @@ from theme import get_color, COLORS
 from components.dialogs import ConfirmDialog, format_currency, format_date, DateEntry
 
 
-EXPENSE_CATEGORIES = [
-    ("geral", "Geral"),
-    ("equipamento", "Equipamento"),
-    ("material", "Material"),
-    ("transporte", "Transporte"),
-    ("aluguel", "Aluguel"),
-    ("manutencao", "Manutenção"),
-    ("outros", "Outros"),
-]
-
-CATEGORY_MAP = {k: v for k, v in EXPENSE_CATEGORIES}
-CATEGORY_COLORS = {
-    "geral": "#6b7280",
-    "equipamento": "#2563eb",
-    "material": "#f59e0b",
-    "transporte": "#8b5cf6",
-    "aluguel": "#ef4444",
-    "manutencao": "#10b981",
-    "outros": "#ec4899",
-}
-
-
 class ExpensesView(ctk.CTkFrame):
     """View de gestão de despesas."""
 
@@ -41,7 +19,15 @@ class ExpensesView(ctk.CTkFrame):
         self.app = app
         self.search_text = ""
         self.category_filter = ""
+        self._load_categories()
         self._build_list()
+
+    def _load_categories(self):
+        """Carrega categorias do banco de dados."""
+        categories = db.get_all_expense_categories()
+        self.expense_categories = [(cat['key'], cat['label']) for cat in categories]
+        self.category_map = {cat['key']: cat['label'] for cat in categories}
+        self.category_colors = {cat['key']: cat['color'] for cat in categories}
 
     def _build_list(self):
         for w in self.winfo_children():
@@ -53,13 +39,26 @@ class ExpensesView(ctk.CTkFrame):
         )
         header.pack(fill="x", pady=(0, 15))
 
+        # Botões de ação
+        action_frame = ctk.CTkFrame(header, fg_color="transparent")
+        action_frame.pack(side="right")
+
         ctk.CTkButton(
-            header, text="  + Nova Despesa  ",
+            action_frame, text="  ⚙️ Categorias  ",
+            font=ctk.CTkFont(size=13),
+            fg_color=get_color("border"), hover_color=get_color("border_hover"),
+            text_color=get_color("text"),
+            height=38, corner_radius=10,
+            command=self._open_categories_manager,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            action_frame, text="  + Nova Despesa  ",
             font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
             height=38, corner_radius=10,
             command=self._open_expense_form,
-        ).pack(side="right")
+        ).pack(side="left")
 
         # Resumo
         summary = db.get_expenses_summary()
@@ -93,7 +92,7 @@ class ExpensesView(ctk.CTkFrame):
         )
         search_frame.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
-        cat_options = ["Todas"] + [v for _, v in EXPENSE_CATEGORIES]
+        cat_options = ["Todas"] + [v for _, v in self.expense_categories]
         self.cat_var = ctk.StringVar(value="Todas")
         ctk.CTkOptionMenu(
             filter_frame, values=cat_options, variable=self.cat_var,
@@ -115,7 +114,7 @@ class ExpensesView(ctk.CTkFrame):
         if value == "Todas":
             self.category_filter = ""
         else:
-            rev_map = {v: k for k, v in EXPENSE_CATEGORIES}
+            rev_map = {v: k for k, v in self.expense_categories}
             self.category_filter = rev_map.get(value, "")
         self._load_expenses()
 
@@ -161,8 +160,8 @@ class ExpensesView(ctk.CTkFrame):
         ).pack(anchor="w")
 
         cat_key = expense.get("category", "geral")
-        cat_label = CATEGORY_MAP.get(cat_key, cat_key)
-        cat_color = CATEGORY_COLORS.get(cat_key, "#6b7280")
+        cat_label = self.category_map.get(cat_key, cat_key)
+        cat_color = self.category_colors.get(cat_key, "#6b7280")
 
         info_frame = ctk.CTkFrame(left, fg_color="transparent")
         info_frame.pack(anchor="w", pady=(2, 0))
@@ -240,8 +239,8 @@ class ExpensesView(ctk.CTkFrame):
         # Categoria
         ctk.CTkLabel(scroll, text="Categoria *", font=ctk.CTkFont(size=12, weight="bold"),
                      text_color=COLORS["text"]).pack(anchor="w")
-        cat_labels = [v for _, v in EXPENSE_CATEGORIES]
-        cat_var = ctk.StringVar(value="Geral")
+        cat_labels = [v for _, v in self.expense_categories]
+        cat_var = ctk.StringVar(value=cat_labels[0] if cat_labels else "Geral")
         ctk.CTkOptionMenu(scroll, values=cat_labels, variable=cat_var,
                           font=ctk.CTkFont(size=12), height=35).pack(fill="x", pady=(2, 8))
 
@@ -267,7 +266,7 @@ class ExpensesView(ctk.CTkFrame):
         if existing:
             desc_entry.insert(0, existing.get("description", ""))
             cat_key = existing.get("category", "geral")
-            cat_var.set(CATEGORY_MAP.get(cat_key, "Geral"))
+            cat_var.set(self.category_map.get(cat_key, cat_labels[0] if cat_labels else "Geral"))
             amount_entry.insert(0, str(existing.get("amount", 0)))
             if existing.get("expense_date"):
                 date_entry.set(str(existing["expense_date"])[:10])
@@ -298,8 +297,8 @@ class ExpensesView(ctk.CTkFrame):
                 self.app.show_toast("Valor inválido.", "error")
                 return
 
-            rev_map = {v: k for k, v in EXPENSE_CATEGORIES}
-            category = rev_map.get(cat_var.get(), "geral")
+            rev_map = {v: k for k, v in self.expense_categories}
+            category = rev_map.get(cat_var.get(), self.expense_categories[0][0] if self.expense_categories else "geral")
             expense_date = date_entry.get_iso().strip() or None
             notes = notes_text.get("1.0", "end-1c").strip()
 
@@ -348,3 +347,230 @@ class ExpensesView(ctk.CTkFrame):
         db.delete_expense(expense_id)
         self.app.show_toast("Despesa excluída.", "success")
         self._build_list()
+
+    def _open_categories_manager(self):
+        """Abre diálogo para gerenciar categorias de despesas."""
+        dialog = ctk.CTkToplevel(self.app)
+        dialog.title("Gerenciar Categorias de Despesas")
+        dialog.geometry("600x500")
+        dialog.grab_set()
+        dialog.transient(self.app)
+
+        dialog.update_idletasks()
+        x = self.app.winfo_rootx() + (self.app.winfo_width() - 600) // 2
+        y = self.app.winfo_rooty() + (self.app.winfo_height() - 500) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+        # Header
+        header = ctk.CTkFrame(dialog, fg_color=COLORS["card"], height=60)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+
+        ctk.CTkLabel(
+            header, text="⚙️ Categorias de Despesas",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(side="left", padx=20)
+
+        ctk.CTkButton(
+            header, text="+ Nova Categoria",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+            height=32, corner_radius=8,
+            command=lambda: self._open_category_form(dialog),
+        ).pack(side="right", padx=20)
+
+        # Lista de categorias
+        list_frame = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
+        list_frame.pack(fill="both", expand=True, padx=20, pady=15)
+
+        def load_categories():
+            for w in list_frame.winfo_children():
+                w.destroy()
+
+            categories = db.get_all_expense_categories()
+
+            ctk.CTkLabel(
+                list_frame, text=f"{len(categories)} categoria(s)",
+                font=ctk.CTkFont(size=12), text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", pady=(0, 10))
+
+            for cat in categories:
+                card = ctk.CTkFrame(list_frame, fg_color=COLORS["card"], corner_radius=8,
+                                    border_width=1, border_color=COLORS["border"])
+                card.pack(fill="x", pady=3)
+
+                inner = ctk.CTkFrame(card, fg_color="transparent")
+                inner.pack(fill="x", padx=12, pady=8)
+
+                # Color badge
+                color_badge = ctk.CTkFrame(inner, fg_color=cat['color'], width=30, height=30,
+                                           corner_radius=5)
+                color_badge.pack(side="left", padx=(0, 12))
+                color_badge.pack_propagate(False)
+
+                # Info
+                info = ctk.CTkFrame(inner, fg_color="transparent")
+                info.pack(side="left", fill="x", expand=True)
+
+                ctk.CTkLabel(
+                    info, text=cat['label'],
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color=COLORS["text"],
+                ).pack(anchor="w")
+
+                ctk.CTkLabel(
+                    info, text=f"Chave: {cat['key']}",
+                    font=ctk.CTkFont(size=11),
+                    text_color=COLORS["text_secondary"],
+                ).pack(anchor="w")
+
+                # Actions
+                actions = ctk.CTkFrame(inner, fg_color="transparent")
+                actions.pack(side="right")
+
+                ctk.CTkButton(
+                    actions, text="✏️", width=30, height=28,
+                    fg_color=COLORS["warning"], hover_color=COLORS["warning_hover"],
+                    corner_radius=6,
+                    command=lambda c=cat: self._open_category_form(dialog, c, load_categories),
+                ).pack(side="left", padx=2)
+
+                ctk.CTkButton(
+                    actions, text="🗑", width=30, height=28,
+                    fg_color=COLORS["error_light"], text_color=COLORS["error"],
+                    hover_color=COLORS["error_hover_light"], corner_radius=6,
+                    command=lambda c=cat: self._confirm_delete_category(c, load_categories),
+                ).pack(side="left", padx=2)
+
+        load_categories()
+
+    def _open_category_form(self, parent_dialog, existing=None, reload_callback=None):
+        """Formulário para criar/editar categoria."""
+        form = ctk.CTkToplevel(parent_dialog)
+        form.title("Editar Categoria" if existing else "Nova Categoria")
+        form.geometry("400x300")
+        form.grab_set()
+        form.transient(parent_dialog)
+
+        form.update_idletasks()
+        x = parent_dialog.winfo_x() + (parent_dialog.winfo_width() - 400) // 2
+        y = parent_dialog.winfo_y() + (parent_dialog.winfo_height() - 300) // 2
+        form.geometry(f"+{x}+{y}")
+
+        content = ctk.CTkFrame(form, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=20, pady=15)
+
+        ctk.CTkLabel(
+            content, text="📂 Categoria de Despesa",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(anchor="w", pady=(0, 15))
+
+        # Chave (só na criação)
+        if not existing:
+            ctk.CTkLabel(
+                content, text="Chave (identificador único) *",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=COLORS["text"],
+            ).pack(anchor="w")
+            key_entry = ctk.CTkEntry(content, height=35, font=ctk.CTkFont(size=13),
+                                     placeholder_text="Ex: material_construcao")
+            key_entry.pack(fill="x", pady=(2, 8))
+
+        # Label
+        ctk.CTkLabel(
+            content, text="Nome *",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(anchor="w")
+        label_entry = ctk.CTkEntry(content, height=35, font=ctk.CTkFont(size=13),
+                                   placeholder_text="Ex: Material de Construção")
+        label_entry.pack(fill="x", pady=(2, 8))
+
+        # Color
+        ctk.CTkLabel(
+            content, text="Cor (hexadecimal) *",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(anchor="w")
+        color_entry = ctk.CTkEntry(content, height=35, font=ctk.CTkFont(size=13),
+                                   placeholder_text="#6b7280")
+        color_entry.pack(fill="x", pady=(2, 12))
+
+        # Preencher se edição
+        if existing:
+            label_entry.insert(0, existing['label'])
+            color_entry.insert(0, existing['color'])
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(form, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        ctk.CTkButton(
+            btn_frame, text="Cancelar",
+            font=ctk.CTkFont(size=13),
+            fg_color=get_color("border"), text_color=get_color("text"),
+            hover_color=get_color("border_hover"),
+            width=100, height=38,
+            command=form.destroy,
+        ).pack(side="left")
+
+        def save():
+            label = label_entry.get().strip()
+            color = color_entry.get().strip() or "#6b7280"
+
+            if not label:
+                self.app.show_toast("Nome é obrigatório.", "error")
+                return
+
+            if not existing:
+                key = key_entry.get().strip()
+                if not key:
+                    self.app.show_toast("Chave é obrigatória.", "error")
+                    return
+                try:
+                    db.create_expense_category(key, label, color)
+                    self.app.show_toast("Categoria criada!", "success")
+                    form.destroy()
+                    if reload_callback:
+                        reload_callback()
+                    self._load_categories()
+                    self._build_list()
+                except ValueError as e:
+                    self.app.show_toast(str(e), "error")
+            else:
+                db.update_expense_category(existing['id'], label, color)
+                self.app.show_toast("Categoria atualizada!", "success")
+                form.destroy()
+                if reload_callback:
+                    reload_callback()
+                self._load_categories()
+                self._build_list()
+
+        ctk.CTkButton(
+            btn_frame, text="💾 Salvar",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=get_color("primary"), hover_color=get_color("primary_hover"),
+            width=150, height=38, corner_radius=10,
+            command=save,
+        ).pack(side="right")
+
+    def _confirm_delete_category(self, category, reload_callback):
+        """Confirma exclusão de categoria."""
+        def delete():
+            try:
+                db.delete_expense_category(category['id'])
+                self.app.show_toast("Categoria excluída.", "success")
+                reload_callback()
+                self._load_categories()
+                self._build_list()
+            except ValueError as e:
+                self.app.show_toast(str(e), "error")
+
+        ConfirmDialog(
+            self.app,
+            "Excluir Categoria",
+            f"Excluir categoria \"{category['label']}\"?\n\nEsta ação não poderá ser desfeita se a categoria não estiver em uso.",
+            delete,
+        )
