@@ -36,6 +36,12 @@ class DateEntry(ctk.CTkFrame):
         try:
             raw = self._var.get()
             
+            # Obter posição do cursor ANTES de qualquer mudança
+            try:
+                old_cursor = self.entry.index(ctk.INSERT)
+            except:
+                old_cursor = len(raw)
+            
             # Remover tudo que não for dígito
             digits = "".join(c for c in raw if c.isdigit())
             # Limitar a 8 dígitos (DDMMAAAA)
@@ -48,28 +54,28 @@ class DateEntry(ctk.CTkFrame):
                     formatted += "/"
                 formatted += d
 
+            # Atualizar o valor
+            self._var.set(formatted)
+
             if formatted != raw:
-                # Obter posição do cursor ANTES de atualizar
-                try:
-                    old_cursor = self.entry.index(ctk.INSERT)
-                except:
-                    old_cursor = len(raw)
-                
-                # Contar quantos dígitos haviam antes do cursor
+                # Contar quantos dígitos haviam antes do cursor no texto RAW
                 digits_before_cursor = sum(1 for c in raw[:old_cursor] if c.isdigit())
                 
-                # No texto formatado, encontrar a posição após N dígitos
+                # Calcular nova posição do cursor no texto formatado
+                # Posicionar após N dígitos, pulando as barras
                 new_cursor = 0
-                digits_counted = 0
                 for i, c in enumerate(formatted):
-                    if c != '/':
-                        digits_counted += 1
-                        new_cursor = i + 1
-                        if digits_counted >= digits_before_cursor:
+                    if c.isdigit():
+                        digits_before_cursor -= 1
+                        if digits_before_cursor <= 0:
+                            new_cursor = i + 1
+                            # Se o próximo caractere é uma barra, pular
+                            if new_cursor < len(formatted) and formatted[new_cursor] == '/':
+                                new_cursor += 1
                             break
-                
-                # Atualizar o valor
-                self._var.set(formatted)
+                else:
+                    # Cursor no final se não encontrou a posição
+                    new_cursor = len(formatted)
                 
                 # Posicionar o cursor corretamente
                 try:
@@ -77,7 +83,7 @@ class DateEntry(ctk.CTkFrame):
                 except:
                     pass
                 
-                self._prev = formatted
+            self._prev = formatted
         finally:
             self._block = False
 
@@ -374,6 +380,40 @@ class FormDialog(ctk.CTkToplevel):
             elif isinstance(widget, ctk.CTkTextbox):
                 data[key] = widget.get("1.0", "end-1c").strip()
         return data
+
+
+def parse_decimal(value):
+    """
+    Converte string para float, aceitando vírgula ou ponto como separador decimal.
+    Remove pontos de milhar (formato brasileiro).
+    Exemplos: "1.250,50" -> 1250.50 | "1250.50" -> 1250.50 | "1250,50" -> 1250.50
+    """
+    if not value:
+        return 0.0
+    try:
+        # Converter para string se não for
+        value_str = str(value).strip()
+        if not value_str:
+            return 0.0
+        
+        # Contar quantidade de pontos e vírgulas
+        dot_count = value_str.count('.')
+        comma_count = value_str.count(',')
+        
+        # Se tem vírgula e ponto, assumir formato brasileiro (1.250,50)
+        if dot_count > 0 and comma_count > 0:
+            # Remover pontos (separadores de milhar) e trocar vírgula por ponto
+            value_str = value_str.replace('.', '').replace(',', '.')
+        # Se tem apenas vírgula, pode ser decimal brasileiro (1250,50)
+        elif comma_count > 0:
+            value_str = value_str.replace(',', '.')
+        # Se tem múltiplos pontos, são separadores de milhar
+        elif dot_count > 1:
+            value_str = value_str.replace('.', '')
+        
+        return float(value_str)
+    except (ValueError, TypeError, AttributeError):
+        return 0.0
 
 
 def format_currency(value):

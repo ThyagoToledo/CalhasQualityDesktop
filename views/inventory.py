@@ -8,7 +8,7 @@ import customtkinter as ctk
 from database import db
 from components.cards import create_header, create_search_bar
 from theme import get_color, COLORS
-from components.dialogs import ConfirmDialog, FormDialog
+from components.dialogs import ConfirmDialog, FormDialog, parse_decimal
 
 
 class InventoryView(ctk.CTkFrame):
@@ -237,7 +237,7 @@ class InventoryView(ctk.CTkFrame):
 
         def confirm():
             try:
-                qty = float(qty_entry.get() or 0)
+                qty = parse_decimal(qty_entry.get() or "0")
                 if qty <= 0:
                     return
                 db.update_inventory_quantity(item["id"], qty, operation)

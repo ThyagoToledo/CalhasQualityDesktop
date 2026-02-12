@@ -15,6 +15,7 @@ from .dialogs import (
     FormDialog,
     format_currency,
     format_date,
+    parse_decimal,
 )
 
 from .navigation import (
@@ -33,5 +34,6 @@ __all__ = [
     'FormDialog',
     'format_currency',
     'format_date',
+    'parse_decimal',
     'Sidebar',
 ]

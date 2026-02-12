@@ -10,7 +10,7 @@ import subprocess
 from database import db
 from components.cards import StatusBadge, create_header, create_search_bar
 from theme import get_color, COLORS
-from components.dialogs import ConfirmDialog, format_currency, format_date, DateEntry
+from components.dialogs import ConfirmDialog, format_currency, format_date, DateEntry, parse_decimal
 from utils import format_measure, format_dimensions
 
 
@@ -694,7 +694,7 @@ class QuotesView(ctk.CTkFrame):
         # Botão registrar
         def register_payment():
             try:
-                amount = float(pay_amount_entry.get() or 0)
+                amount = parse_decimal(pay_amount_entry.get() or "0")
                 if amount <= 0:
                     self.app.show_toast("Valor deve ser maior que zero.", "warning")
                     return
@@ -901,7 +901,7 @@ class QuotesView(ctk.CTkFrame):
                 w.destroy()
             subtotal = sum(it["total"] for it in items_list)
             try:
-                discount_total = float(discount_total_entry.get() or 0) if 'discount_total_entry' in locals() else 0
+                discount_total = parse_decimal(discount_total_entry.get() or "0") if 'discount_total_entry' in locals() else 0
                 dtype = discount_type_var.get() if 'discount_type_var' in locals() else "%"
             except:
                 discount_total = 0
@@ -1061,7 +1061,7 @@ class QuotesView(ctk.CTkFrame):
                 return
             try:
                 pricing_unit = product.get('pricing_unit', 'metro')
-                qty = float(meters_entry.get() or 0)
+                qty = parse_decimal(meters_entry.get() or "0")
                 if qty <= 0:
                     unit_name = "metros" if pricing_unit == 'metro' else "quantidade"
                     self.app.show_toast(f"{unit_name.capitalize()} deve ser maior que zero.", "warning")
@@ -1071,7 +1071,7 @@ class QuotesView(ctk.CTkFrame):
                 return
             
             try:
-                discount = float(discount_entry.get() or 0)
+                discount = parse_decimal(discount_entry.get() or "0")
                 if discount < 0:
                     self.app.show_toast("Desconto não pode ser negativo.", "warning")
                     return
@@ -1208,9 +1208,9 @@ class QuotesView(ctk.CTkFrame):
                     self.app.show_toast("Nome do produto é obrigatório.", "error")
                     return
                 try:
-                    p_width = float(np_width.get() or 0)
-                    p_price = float(np_price.get() or 0)
-                    p_cost = float(np_cost.get() or 0)
+                    p_width = parse_decimal(np_width.get() or "0")
+                    p_price = parse_decimal(np_price.get() or "0")
+                    p_cost = parse_decimal(np_cost.get() or "0")
                     p_installed = int(np_installed_var.get())
                     p_pricing = np_pricing_var.get()
                     if p_price <= 0 or p_width <= 0:
@@ -1366,7 +1366,7 @@ class QuotesView(ctk.CTkFrame):
         
         def update_total_with_discount():
             try:
-                disc = float(discount_total_entry.get() or 0)
+                disc = parse_decimal(discount_total_entry.get() or "0")
                 dtype = "percentage" if discount_type_var.get() == "%" else "value"
                 
                 if dtype == "percentage" and (disc < 0 or disc > 100):
@@ -1437,7 +1437,7 @@ class QuotesView(ctk.CTkFrame):
             )
 
             try:
-                discount_total = float(discount_total_entry.get() or 0)
+                discount_total = parse_decimal(discount_total_entry.get() or "0")
                 discount_type = "percentage" if discount_type_var.get() == "%" else "value"
                 
                 if discount_type == "percentage" and (discount_total < 0 or discount_total > 100):

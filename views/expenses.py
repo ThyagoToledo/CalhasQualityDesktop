@@ -8,7 +8,7 @@ import customtkinter as ctk
 from database import db
 from components.cards import create_header, create_search_bar
 from theme import get_color, COLORS
-from components.dialogs import ConfirmDialog, format_currency, format_date, DateEntry
+from components.dialogs import ConfirmDialog, format_currency, format_date, DateEntry, parse_decimal
 
 
 class ExpensesView(ctk.CTkFrame):
@@ -289,7 +289,7 @@ class ExpensesView(ctk.CTkFrame):
                 self.app.show_toast("Descrição é obrigatória.", "error")
                 return
             try:
-                amount = float(amount_entry.get() or 0)
+                amount = parse_decimal(amount_entry.get() or "0")
                 if amount <= 0:
                     self.app.show_toast("Valor deve ser maior que zero.", "error")
                     return

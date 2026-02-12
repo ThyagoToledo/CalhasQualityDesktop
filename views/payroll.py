@@ -9,7 +9,7 @@ from datetime import datetime
 from database import db
 from components.cards import create_header
 from theme import get_color, COLORS
-from components.dialogs import ConfirmDialog, format_currency, format_date
+from components.dialogs import ConfirmDialog, format_currency, format_date, parse_decimal
 
 
 class PayrollView(ctk.CTkFrame):
@@ -320,7 +320,7 @@ class PayrollView(ctk.CTkFrame):
                 self.app.show_toast("Nome é obrigatório.", "error")
                 return
             try:
-                salary = float(salary_entry.get() or 0)
+                salary = parse_decimal(salary_entry.get() or "0")
             except ValueError:
                 self.app.show_toast("Salário inválido.", "error")
                 return
@@ -431,7 +431,7 @@ class PayrollView(ctk.CTkFrame):
             employee = employees[idx]
 
             try:
-                amount = float(amount_entry.get() or 0)
+                amount = parse_decimal(amount_entry.get() or "0")
                 if amount <= 0:
                     self.app.show_toast("Valor deve ser maior que zero.", "error")
                     return

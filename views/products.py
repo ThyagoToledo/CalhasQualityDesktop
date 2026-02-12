@@ -10,7 +10,7 @@ from components.cards import (
     StatusBadge, create_header, create_search_bar
 )
 from theme import COLORS, get_color
-from components.dialogs import ConfirmDialog, FormDialog, format_currency
+from components.dialogs import ConfirmDialog, FormDialog, format_currency, parse_decimal
 from utils import format_measure, format_dimensions
 
 
@@ -478,7 +478,7 @@ class ProductsView(ctk.CTkFrame):
                 self.app.show_toast("Selecione um material do estoque.", "warning")
                 return
             try:
-                qty = float(qty_entry.get() or 1)
+                qty = parse_decimal(qty_entry.get() or "1")
                 if qty <= 0:
                     self.app.show_toast("Quantidade deve ser maior que zero.", "warning")
                     return
