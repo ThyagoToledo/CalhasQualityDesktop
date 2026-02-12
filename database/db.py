@@ -635,8 +635,8 @@ def add_quote_item(quote_id: int, product_id: int, meters: float,
         raise ValueError("Produto não encontrado")
     
     price_per_meter = custom_price if custom_price else product['price_per_meter']
-    # Aplicar acréscimo de dobra se ativado no produto
-    if product['has_dobra']:
+    # Aplicar acréscimo de dobra se ativado no produto (apenas se NÃO usar preço customizado)
+    if not custom_price and product['has_dobra']:
         dobra = get_dobra_value()
         price_per_meter += dobra
     

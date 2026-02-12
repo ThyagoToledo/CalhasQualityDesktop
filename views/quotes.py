@@ -1038,6 +1038,17 @@ class QuotesView(ctk.CTkFrame):
             prod_search_entry.insert(0, name)
             suggestions_frame.pack_forget()
 
+            # Auto-preencher preço personalizado
+            product = product_map.get(name)
+            if product:
+                price = product["price_per_meter"]
+                if product.get("has_dobra"):
+                    price += dobra_value
+                elif quote_type == "nao_instalado" and dobrado_var.get():
+                    price += dobra_value
+                custom_price_entry.delete(0, "end")
+                custom_price_entry.insert(0, f"{price:.2f}")
+
         prod_search_entry.bind("<KeyRelease>", update_suggestions)
         prod_search_entry.bind("<FocusIn>", update_suggestions)
 
@@ -1052,6 +1063,52 @@ class QuotesView(ctk.CTkFrame):
         discount_entry = ctk.CTkEntry(add_inner, width=70, height=35, font=ctk.CTkFont(size=13))
         discount_entry.grid(row=0, column=4, sticky="w", padx=(0, 8))
         discount_entry.insert(0, "0")
+
+        # --- Linha 2: Preço personalizado e Dobrado ---
+        price_row = ctk.CTkFrame(add_inner, fg_color="transparent")
+        price_row.grid(row=1, column=0, columnspan=7, sticky="ew", pady=(8, 0))
+
+        dobrado_var = ctk.BooleanVar(value=False)
+
+        def on_dobrado_toggle():
+            """Adiciona/remove valor da dobra no preço personalizado."""
+            sel = product_var.get()
+            product = product_map.get(sel)
+            if product:
+                try:
+                    current_price = parse_decimal(custom_price_entry.get() or "0")
+                except ValueError:
+                    current_price = product["price_per_meter"]
+                if dobrado_var.get():
+                    current_price += dobra_value
+                else:
+                    current_price -= dobra_value
+                    if current_price < 0:
+                        current_price = 0
+                custom_price_entry.delete(0, "end")
+                custom_price_entry.insert(0, f"{current_price:.2f}")
+
+        if quote_type == "nao_instalado":
+            ctk.CTkCheckBox(
+                price_row, text=f"Dobrado? (+{format_currency(dobra_value)}/m)",
+                variable=dobrado_var,
+                font=ctk.CTkFont(size=12),
+                checkbox_height=22, checkbox_width=22,
+                corner_radius=6, border_width=2,
+                fg_color=get_color("primary"),
+                hover_color=get_color("primary_hover"),
+                text_color=get_color("text"),
+                command=on_dobrado_toggle,
+            ).pack(side="left", padx=(0, 15))
+
+        ctk.CTkLabel(price_row, text="Preço R$/m (ou un):", font=ctk.CTkFont(size=12),
+                     text_color=COLORS["text"]).pack(side="left", padx=(0, 5))
+        custom_price_entry = ctk.CTkEntry(price_row, width=100, height=35, font=ctk.CTkFont(size=13),
+                                           placeholder_text="Auto")
+        custom_price_entry.pack(side="left", padx=(0, 10))
+
+        ctk.CTkLabel(price_row, text="(deixe vazio para usar o preço padrão do produto)",
+                     font=ctk.CTkFont(size=10), text_color=COLORS["text_secondary"]).pack(side="left")
 
         def add_item():
             sel = product_var.get()
@@ -1079,9 +1136,26 @@ class QuotesView(ctk.CTkFrame):
                 self.app.show_toast("Valor inválido para desconto.", "warning")
                 return
 
-            effective_price = product["price_per_meter"]
-            if product.get("has_dobra"):
-                effective_price += dobra_value
+            # Usar preço personalizado se informado, senão usar o padrão
+            custom_price_text = custom_price_entry.get().strip()
+            use_custom_price = False
+            if custom_price_text:
+                try:
+                    effective_price = parse_decimal(custom_price_text)
+                    if effective_price <= 0:
+                        self.app.show_toast("Preço personalizado deve ser maior que zero.", "warning")
+                        return
+                    use_custom_price = True
+                except ValueError:
+                    self.app.show_toast("Valor inválido para preço personalizado.", "warning")
+                    return
+            else:
+                effective_price = product["price_per_meter"]
+                if product.get("has_dobra"):
+                    effective_price += dobra_value
+                # Para não instalado, aplicar dobra se checkbox marcado
+                elif quote_type == "nao_instalado" and dobrado_var.get():
+                    effective_price += dobra_value
             
             # Desconto é aplicado no preço unitário (por metro/unidade)
             discount_amount = discount  # desconto em reais por metro/unidade
@@ -1091,8 +1165,9 @@ class QuotesView(ctk.CTkFrame):
             final_price = effective_price - discount_amount
             total = qty * final_price
             
+            is_dobrado = dobrado_var.get() if quote_type == "nao_instalado" else product.get("has_dobra", False)
             unit_label = "m" if pricing_unit == 'metro' else "un"
-            display_name = product["name"] + (" (c/ dobra)" if product.get("has_dobra") else "")
+            display_name = product["name"] + (" (c/ dobra)" if (product.get("has_dobra") or is_dobrado) else "")
             
             items_list.append({
                 "id": None,
@@ -1103,6 +1178,7 @@ class QuotesView(ctk.CTkFrame):
                 "length": 0,
                 "meters": qty,
                 "price_per_meter": final_price,
+                "custom_price": effective_price if use_custom_price else None,
                 "discount": discount,
                 "total": total,
                 "pricing_unit": pricing_unit,
@@ -1112,8 +1188,11 @@ class QuotesView(ctk.CTkFrame):
             meters_entry.insert(0, "1")
             discount_entry.delete(0, "end")
             discount_entry.insert(0, "0")
+            custom_price_entry.delete(0, "end")
             prod_search_entry.delete(0, "end")
             product_var.set("")
+            if quote_type == "nao_instalado":
+                dobrado_var.set(False)
 
         ctk.CTkButton(
             add_inner, text="+ Adicionar", font=ctk.CTkFont(size=12, weight="bold"),
@@ -1475,6 +1554,7 @@ class QuotesView(ctk.CTkFrame):
                             existing_quote["id"],
                             item["product_id"],
                             item["meters"],
+                            custom_price=item.get("custom_price"),
                             discount=item.get("discount", 0),
                         )
                     self.app.show_toast("Orçamento atualizado!", "success")
@@ -1497,6 +1577,7 @@ class QuotesView(ctk.CTkFrame):
                             quote_id,
                             item["product_id"],
                             item["meters"],
+                            custom_price=item.get("custom_price"),
                             discount=item.get("discount", 0),
                         )
                     self.app.show_toast("Orçamento criado com sucesso!", "success")
