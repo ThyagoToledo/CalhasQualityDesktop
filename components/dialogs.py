@@ -26,66 +26,77 @@ class DateEntry(ctk.CTkFrame):
             placeholder_text=placeholder,
         )
         self.entry.pack(fill="x")
-        self._var.trace_add("write", self._on_change)
 
-    def _on_change(self, *_):
+        # Usar bind em vez de trace para ter controle preciso do cursor
+        self.entry.bind("<KeyRelease>", self._on_key)
+
+    def _format_digits(self, digits):
+        """Formata dígitos puros em DD/MM/AAAA."""
+        result = ""
+        for i, d in enumerate(digits):
+            if i == 2 or i == 4:
+                result += "/"
+            result += d
+        return result
+
+    def _on_key(self, event=None):
+        """Chamado após cada tecla — formata e reposiciona o cursor."""
         if self._block:
             return
         self._block = True
-
         try:
             raw = self._var.get()
-            
-            # Obter posição do cursor ANTES de qualquer mudança
+
+            # Capturar posição do cursor no texto cru
             try:
                 old_cursor = self.entry.index(ctk.INSERT)
-            except:
+            except Exception:
                 old_cursor = len(raw)
-            
-            # Remover tudo que não for dígito
-            digits = "".join(c for c in raw if c.isdigit())
-            # Limitar a 8 dígitos (DDMMAAAA)
-            digits = digits[:8]
 
-            # Formatar com barras: DD/MM/AAAA
-            formatted = ""
-            for i, d in enumerate(digits):
-                if i == 2 or i == 4:
-                    formatted += "/"
-                formatted += d
+            # Extrair apenas dígitos, máximo 8
+            digits = "".join(c for c in raw if c.isdigit())[:8]
+            formatted = self._format_digits(digits)
 
-            # Atualizar o valor
+            if formatted == raw:
+                # Nada mudou, não precisa reposicionar
+                self._prev = formatted
+                return
+
+            # Contar quantos dígitos estavam antes da posição do cursor no texto cru
+            digits_before = sum(1 for c in raw[:old_cursor] if c.isdigit())
+
+            # Atualizar o texto
             self._var.set(formatted)
 
-            if formatted != raw:
-                # Contar quantos dígitos haviam antes do cursor no texto RAW
-                digits_before_cursor = sum(1 for c in raw[:old_cursor] if c.isdigit())
-                
-                # Calcular nova posição do cursor no texto formatado
-                # Posicionar após N dígitos, pulando as barras
-                new_cursor = 0
-                for i, c in enumerate(formatted):
-                    if c.isdigit():
-                        digits_before_cursor -= 1
-                        if digits_before_cursor <= 0:
-                            new_cursor = i + 1
-                            # Se o próximo caractere é uma barra, pular
-                            if new_cursor < len(formatted) and formatted[new_cursor] == '/':
-                                new_cursor += 1
-                            break
-                else:
-                    # Cursor no final se não encontrou a posição
-                    new_cursor = len(formatted)
-                
-                # Posicionar o cursor corretamente
-                try:
-                    self.entry.icursor(new_cursor)
-                except:
-                    pass
-                
+            # Mapear: posição no texto formatado após 'digits_before' dígitos
+            new_cursor = 0
+            count = 0
+            for i, c in enumerate(formatted):
+                if c.isdigit():
+                    count += 1
+                if count == digits_before:
+                    new_cursor = i + 1
+                    break
+            else:
+                new_cursor = len(formatted)
+
+            # Se caiu exatamente antes de uma barra, avançar para depois dela
+            if new_cursor < len(formatted) and formatted[new_cursor] == '/':
+                new_cursor += 1
+
+            # Agendar reposicionamento para DEPOIS do widget processar o set()
+            self.entry.after_idle(self._set_cursor, new_cursor)
+
             self._prev = formatted
         finally:
             self._block = False
+
+    def _set_cursor(self, pos):
+        """Reposiciona o cursor de forma segura, após o event-loop."""
+        try:
+            self.entry.icursor(pos)
+        except Exception:
+            pass
 
     def get(self):
         """Retorna a data digitada no formato DD/MM/AAAA."""
@@ -136,32 +147,55 @@ class TimeEntry(ctk.CTkFrame):
             placeholder_text=placeholder,
         )
         self.entry.pack(fill="x")
-        self._var.trace_add("write", self._on_change)
+        self.entry.bind("<KeyRelease>", self._on_key)
 
-    def _on_change(self, *_):
+    def _on_key(self, event=None):
         if self._block:
             return
         self._block = True
-
-        raw = self._var.get()
-        digits = "".join(c for c in raw if c.isdigit())
-        digits = digits[:4]
-
-        formatted = ""
-        for i, d in enumerate(digits):
-            if i == 2:
-                formatted += ":"
-            formatted += d
-
-        cursor = len(formatted)
-        self._var.set(formatted)
-
         try:
-            self.entry.icursor(cursor)
+            raw = self._var.get()
+            try:
+                old_cursor = self.entry.index(ctk.INSERT)
+            except Exception:
+                old_cursor = len(raw)
+
+            digits = "".join(c for c in raw if c.isdigit())[:4]
+            formatted = ""
+            for i, d in enumerate(digits):
+                if i == 2:
+                    formatted += ":"
+                formatted += d
+
+            if formatted == raw:
+                return
+
+            digits_before = sum(1 for c in raw[:old_cursor] if c.isdigit())
+            self._var.set(formatted)
+
+            new_cursor = 0
+            count = 0
+            for i, c in enumerate(formatted):
+                if c.isdigit():
+                    count += 1
+                if count == digits_before:
+                    new_cursor = i + 1
+                    break
+            else:
+                new_cursor = len(formatted)
+
+            if new_cursor < len(formatted) and formatted[new_cursor] == ':':
+                new_cursor += 1
+
+            self.entry.after_idle(lambda: self._set_cursor(new_cursor))
+        finally:
+            self._block = False
+
+    def _set_cursor(self, pos):
+        try:
+            self.entry.icursor(pos)
         except Exception:
             pass
-
-        self._block = False
 
     def get(self):
         """Retorna o horário digitado HH:MM."""
