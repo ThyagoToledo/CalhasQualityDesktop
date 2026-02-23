@@ -355,6 +355,36 @@ def init_database():
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO settings (company_name) VALUES ('CalhaGest')")
     
+    # ===== OTIMIZAÇÃO: Criar índices para melhorar performance =====
+    # Índices para buscas de produtos (MUITO usado na view de produtos)
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_type ON products(type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_name_type ON products(name, type)")
+    except sqlite3.OperationalError:
+        pass  # Índices já existem
+    
+    # Índices para quotes (usados em filtros)
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_quotes_client_name ON quotes(client_name)")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Índices para tabelas de relacionamento (product_materials, quote_items)
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_product_materials_product_id ON product_materials(product_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_quote_items_quote_id ON quote_items(quote_id)")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Índices para inventory e installations
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventory_name ON inventory(name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_installations_quote_id ON installations(quote_id)")
+    except sqlite3.OperationalError:
+        pass
+    
     conn.commit()
     conn.close()
 
@@ -366,6 +396,62 @@ def _auto_backup():
         trigger_backup()
     except Exception:
         pass  # Nunca interromper operação principal por falha de backup
+
+
+# ===== OTIMIZAÇÃO: Cache em Memória para Produtos =====
+class _ProductCache:
+    """Cache simples para produtos em memória. Reduz requerys ao banco."""
+    def __init__(self):
+        self.all_products = None  # Lista completa de produtos
+        self.last_search = {}     # Cache de buscas recentes
+        self.last_types = None    # Cache de tipos de produto
+    
+    def invalidate(self):
+        """Invalida todo o cache após escrita no BD."""
+        self.all_products = None
+        self.last_search = {}
+        self.last_types = None
+    
+    def get_all_products_cached(self, search: str = "", type_filter: str = ""):
+        """Retorna produtos com cache. Misses vão pro BD."""
+        # Gera chave de cache
+        cache_key = f"{search}|{type_filter}"
+        
+        # Se tiver em cache, retorna
+        if cache_key in self.last_search:
+            return self.last_search[cache_key]
+        
+        # Senão, busca no BD
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        query = "SELECT * FROM products WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND name LIKE ?"
+            params.append(f"%{search}%")
+        
+        if type_filter:
+            query += " AND type = ?"
+            params.append(type_filter)
+        
+        query += " ORDER BY name"
+        cursor.execute(query, params)
+        products = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        # Armazena em cache
+        self.last_search[cache_key] = products
+        
+        # Limita cache a 10 buscas recentes para não consumir muita memória
+        if len(self.last_search) > 10:
+            oldest_key = next(iter(self.last_search))
+            del self.last_search[oldest_key]
+        
+        return products
+
+_product_cache = _ProductCache()
 
 
 # ============== CRUD de Produtos ==============
@@ -385,30 +471,13 @@ def create_product(name: str, type: str, measure: float, price_per_meter: float,
     conn.commit()
     conn.close()
     _auto_backup()
+    _product_cache.invalidate()  # Invalida cache após criar novo produto
     return product_id
 
 
 def get_all_products(search: str = "", type_filter: str = "") -> List[Dict]:
-    """Retorna todos os produtos com filtros opcionais."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    query = "SELECT * FROM products WHERE 1=1"
-    params = []
-    
-    if search:
-        query += " AND name LIKE ?"
-        params.append(f"%{search}%")
-    
-    if type_filter:
-        query += " AND type = ?"
-        params.append(type_filter)
-    
-    query += " ORDER BY name"
-    cursor.execute(query, params)
-    products = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return products
+    """Retorna todos os produtos com filtros opcionais. Usa cache para performance."""
+    return _product_cache.get_all_products_cached(search, type_filter)
 
 
 def get_product_by_id(product_id: int) -> Optional[Dict]:
@@ -446,6 +515,7 @@ def update_product(product_id: int, **kwargs) -> bool:
     conn.close()
     if success:
         _auto_backup()
+        _product_cache.invalidate()  # Invalida cache após atualizar produto
     return success
 
 
@@ -459,6 +529,7 @@ def delete_product(product_id: int) -> bool:
     conn.close()
     if success:
         _auto_backup()
+        _product_cache.invalidate()  # Invalida cache após deletar produto
     return success
 
 

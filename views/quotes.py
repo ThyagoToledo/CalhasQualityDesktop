@@ -882,6 +882,12 @@ class QuotesView(ctk.CTkFrame):
 
         if existing_quote and existing_quote.get("items"):
             for item in existing_quote["items"]:
+                # Recuperar o preço original (antes do desconto) para preservar o custom_price
+                price_per_meter = item.get("price_per_meter", 0)
+                discount = item.get("discount", 0)
+                # O preço original é o price_per_meter + discount (pois o desconto foi subtraído)
+                original_price = price_per_meter + discount
+                
                 items_list.append({
                     "id": item.get("id"),
                     "product_id": item.get("product_id"),
@@ -890,8 +896,9 @@ class QuotesView(ctk.CTkFrame):
                     "width": item.get("width", 0),
                     "length": item.get("length", 0),
                     "meters": item.get("meters", 0),
-                    "price_per_meter": item.get("price_per_meter", 0),
-                    "discount": item.get("discount", 0),
+                    "price_per_meter": price_per_meter,
+                    "custom_price": original_price,  # Preservar o preço customizado para re-salvar
+                    "discount": discount,
                     "total": item.get("total", 0),
                     "pricing_unit": item.get("pricing_unit", "metro"),
                 })
@@ -1712,11 +1719,17 @@ class QuotesView(ctk.CTkFrame):
                 for item in items:
                     item_id = item.get("id")
                     if item_id and item_vars.get(item_id) and item_vars[item_id].get():
+                        # Calcular preço original (antes do desconto) para preservar custom_price
+                        price_per_meter = item.get("price_per_meter", 0)
+                        discount = item.get("discount", 0)
+                        original_price = price_per_meter + discount
+                        
                         # Adicionar no novo orçamento
                         db.add_quote_item(
                             new_quote_id,
                             item.get("product_id"),
                             item.get("meters", 0),
+                            custom_price=original_price,
                             discount=item.get("discount", 0),
                         )
                         # Remover do orçamento original

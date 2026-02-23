@@ -106,6 +106,17 @@ Este projeto é de uso privado da **Calhas Quality**.
 
 ---
 
+## 📚 Documentação do Sistema
+
+Para aprender mais sobre como o sistema funciona e consultar informações detalhadas, acesse a pasta **`Info_Sistema/`** na raiz do projeto. Lá você encontrará:
+
+- **[Sistema.md](Info_Sistema/Sistema.md)** — Especificação completa das funcionalidades, modelo de dados, fluxos de trabalho e requisitos técnicos
+- **[GOOGLE_DRIVE_SETUP.md](Info_Sistema/GOOGLE_DRIVE_SETUP.md)** — Guia passo a passo para configurar backup automático no Google Drive
+
+> 💡 **Dica:** A documentação na pasta `Info_Sistema/` é organizada de forma didática e interativa, perfeita para entender o sistema em detalhes.
+
+---
+
 <div align="center">
 
 **Desenvolvido com ❤️ para Calhas Quality**

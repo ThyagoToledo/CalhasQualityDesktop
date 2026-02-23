@@ -61,6 +61,9 @@ class CalhaGestApp(ctk.CTk):
         # Toast container
         self._toast_label = None
 
+        # Cache de views instanciadas (evita reconstrução a cada navegação)
+        self._views = {}
+
         # Exibir dashboard
         self.show_view("dashboard")
 
@@ -78,50 +81,61 @@ class CalhaGestApp(ctk.CTk):
             pass
 
     def show_view(self, view_name):
-        """Alterna para uma view diferente."""
+        """Alterna para uma view diferente (com cache de instâncias)."""
         if view_name == self.current_view_name:
             return
 
-        # Limpar conteúdo atual
-        for widget in self.content_frame.winfo_children():
-            if widget != self._toast_label:
-                widget.destroy()
+        # Ocultar view atual sem destruir os widgets
+        if self.current_view_name and self.current_view_name in self._views:
+            self._views[self.current_view_name].pack_forget()
 
-        # Importar e criar a view
-        view = None
-        if view_name == "dashboard":
-            from views.dashboard import DashboardView
-            view = DashboardView(self.content_frame, self)
-        elif view_name == "products":
-            from views.products import ProductsView
-            view = ProductsView(self.content_frame, self)
-        elif view_name == "quotes":
-            from views.quotes import QuotesView
-            view = QuotesView(self.content_frame, self)
-        elif view_name == "inventory":
-            from views.inventory import InventoryView
-            view = InventoryView(self.content_frame, self)
-        elif view_name == "installations":
-            from views.installations import InstallationsView
-            view = InstallationsView(self.content_frame, self)
-        elif view_name == "expenses":
-            from views.expenses import ExpensesView
-            view = ExpensesView(self.content_frame, self)
-        elif view_name == "payroll":
-            from views.payroll import PayrollView
-            view = PayrollView(self.content_frame, self)
-        elif view_name == "analytics":
-            from views.analytics import AnalyticsView
-            view = AnalyticsView(self.content_frame, self)
-        elif view_name == "settings":
-            from views.settings import SettingsView
-            view = SettingsView(self.content_frame, self)
+        # Criar view apenas se ainda não estiver em cache
+        if view_name not in self._views:
+            view = self._create_view(view_name)
+            if view:
+                self._views[view_name] = view
 
-        if view:
+        # Exibir view (nova ou cacheada)
+        if view_name in self._views:
+            view = self._views[view_name]
             view.pack(fill="both", expand=True, padx=15, pady=15)
+            # Chamar on_show() se a view suportar (para atualizar dados sem reconstruir widgets)
+            if hasattr(view, "on_show"):
+                view.on_show()
 
         self.current_view_name = view_name
         self.sidebar.set_active(view_name)
+
+    def _create_view(self, view_name):
+        """Cria e retorna uma nova instância de view (chamado apenas uma vez por view)."""
+        if view_name == "dashboard":
+            from views.dashboard import DashboardView
+            return DashboardView(self.content_frame, self)
+        elif view_name == "products":
+            from views.products import ProductsView
+            return ProductsView(self.content_frame, self)
+        elif view_name == "quotes":
+            from views.quotes import QuotesView
+            return QuotesView(self.content_frame, self)
+        elif view_name == "inventory":
+            from views.inventory import InventoryView
+            return InventoryView(self.content_frame, self)
+        elif view_name == "installations":
+            from views.installations import InstallationsView
+            return InstallationsView(self.content_frame, self)
+        elif view_name == "expenses":
+            from views.expenses import ExpensesView
+            return ExpensesView(self.content_frame, self)
+        elif view_name == "payroll":
+            from views.payroll import PayrollView
+            return PayrollView(self.content_frame, self)
+        elif view_name == "analytics":
+            from views.analytics import AnalyticsView
+            return AnalyticsView(self.content_frame, self)
+        elif view_name == "settings":
+            from views.settings import SettingsView
+            return SettingsView(self.content_frame, self)
+        return None
 
     def toggle_theme(self):
         """Alterna entre tema claro e escuro."""
@@ -142,8 +156,10 @@ class CalhaGestApp(ctk.CTk):
             self.show_toast("Tema claro ativado ☀️", "info")
         
         # Recarregar view atual para atualizar cores
+        # Ao trocar de tema é necessário recriar os widgets — limpar o cache
         current = self.current_view_name
         self.current_view_name = None
+        self._views.clear()
         self.show_view(current)
 
     def show_toast(self, message, type_="info"):

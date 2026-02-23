@@ -14,6 +14,7 @@ from database import db
 from services.backup import (
     get_backup_dir, set_backup_dir, get_default_backup_dir,
     save_backup, load_backup, restore_from_backup, get_backup_filepath,
+    upload_backup_to_drive_manual,
 )
 from components.cards import create_header
 from theme import get_color, COLORS
@@ -354,14 +355,23 @@ class SettingsView(ctk.CTkScrollableFrame):
                 pass
 
     def _manual_backup(self):
-        """Faz backup manual."""
+        """Faz backup manual e faz upload para Google Drive."""
         try:
+            # 1. Salvar backup localmente
             filepath = save_backup()
             self.backup_status_label.configure(
                 text=f"✅ Arquivo: {filepath}",
                 text_color=COLORS["success"],
             )
-            self.app.show_toast("Backup salvo com sucesso!", "success")
+            self.app.show_toast("Backup salvo localmente!", "success")
+            
+            # 2. Tentar fazer upload para Google Drive
+            upload_success = upload_backup_to_drive_manual()
+            if upload_success:
+                self.app.show_toast("✅ Backup enviado para o Google Drive!", "success")
+            else:
+                # Backup local foi salvo, mas Drive não estava disponível
+                self.app.show_toast("⚠️ Backup local salvo, mas Drive não está configurado ou acessível.", "warning")
         except Exception as e:
             self.app.show_toast(f"Erro no backup: {e}", "error")
 

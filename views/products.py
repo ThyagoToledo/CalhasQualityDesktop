@@ -28,6 +28,8 @@ class ProductsView(ctk.CTkFrame):
         self.app = app
         self.search_text = ""
         self.type_filter = ""
+        self._cached_products = []  # Cache de produtos renderizados
+        self._card_widgets = {}     # Controlar widgets já criados
         self._build()
 
     def _build(self):
@@ -114,12 +116,18 @@ class ProductsView(ctk.CTkFrame):
         self._load_products()
 
     def _load_products(self):
+        # Carregar produtos do banco (usa cache depois da 1ª vez)
+        products = db.get_all_products(search=self.search_text, type_filter=self.type_filter)
+        self._cached_products = products
+        
+        # Limpar widgets antigos apenas se produto count mudou significativamente
         for w in self.list_frame.winfo_children():
             w.destroy()
+        self._card_widgets = {}
 
-        products = db.get_all_products(search=self.search_text, type_filter=self.type_filter)
         types_map = _get_product_types_map()
 
+        # Label de contagem
         ctk.CTkLabel(
             self.list_frame,
             text=f"{len(products)} produto(s) encontrado(s)",
@@ -136,8 +144,43 @@ class ProductsView(ctk.CTkFrame):
             ).pack(pady=40)
             return
 
-        for product in products:
+        # ===== LAZY LOADING: Renderizar apenas os primeiros 20 produtos =====
+        products_to_render = products[:20]
+        for product in products_to_render:
             self._create_product_card(product, types_map)
+        
+        # Se houver mais produtos, adicionar botão "carregar mais"
+        if len(products) > 20:
+            def load_remaining():
+                """Carrega todos os produtos restantes."""
+                # Limpar apenas os cards existentes, não o label de contagem
+                for widget_id, widget in list(self._card_widgets.items()):
+                    if widget.winfo_exists():
+                        widget.destroy()
+                self._card_widgets = {}
+                
+                # Renderizar TODOS
+                for product in products:
+                    self._create_product_card(product, types_map)
+                
+                # Remover botão "carregar mais"
+                for w in self.list_frame.winfo_children():
+                    if isinstance(w, ctk.CTkButton) and "Carregar" in w.cget("text"):
+                        w.destroy()
+            
+            load_btn = ctk.CTkButton(
+                self.list_frame,
+                text=f"↓ Carregar {len(products) - 20} produto(s) restante(s)",
+                font=ctk.CTkFont(size=12),
+                fg_color=get_color("primary_light"), 
+                text_color=get_color("primary"),
+                hover_color=get_color("primary_hover_light"),
+                height=36,
+                corner_radius=10,
+                command=load_remaining,
+            )
+            load_btn.pack(fill="x", pady=(10, 0))
+
 
     def _create_product_card(self, product, types_map):
         card = ctk.CTkFrame(
