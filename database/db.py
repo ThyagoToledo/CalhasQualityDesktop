@@ -59,12 +59,7 @@ def init_database():
     except sqlite3.OperationalError:
         pass  # Coluna já existe
 
-    # Migração: adicionar coluna drive_folder_link se não existir
-    try:
-        cursor.execute("ALTER TABLE settings ADD COLUMN drive_folder_link TEXT")
-    except sqlite3.OperationalError:
-        pass  # Coluna já existe
-    
+
     # Tabela de Tipos de Produto (dinâmica)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS product_types (
