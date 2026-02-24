@@ -58,6 +58,12 @@ def init_database():
         cursor.execute("ALTER TABLE settings ADD COLUMN backup_path TEXT")
     except sqlite3.OperationalError:
         pass  # Coluna já existe
+
+    # Migração: adicionar coluna drive_folder_link se não existir
+    try:
+        cursor.execute("ALTER TABLE settings ADD COLUMN drive_folder_link TEXT")
+    except sqlite3.OperationalError:
+        pass  # Coluna já existe
     
     # Tabela de Tipos de Produto (dinâmica)
     cursor.execute("""
@@ -1017,7 +1023,7 @@ def update_settings(**kwargs) -> bool:
     
     allowed_fields = ['company_name', 'company_phone', 'company_email',
                       'company_address', 'company_cnpj', 'company_logo',
-                      'dobra_value', 'backup_path']
+                      'dobra_value', 'backup_path', 'drive_folder_link']
     
     fields = []
     values = []

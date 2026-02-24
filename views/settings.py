@@ -21,6 +21,68 @@ from theme import get_color, COLORS
 from components.dialogs import ConfirmDialog
 
 
+class _RestoreFileDialog(ctk.CTkToplevel):
+    """Diálogo de confirmação para 'Restaurar o Arquivo' com botão 'Continuar'."""
+
+    def __init__(self, parent, message, on_confirm):
+        super().__init__(parent)
+        self.on_confirm = on_confirm
+        self.title("Restaurar o Arquivo")
+        self.geometry("440x220")
+        self.resizable(False, False)
+        self.grab_set()
+        self.transient(parent)
+
+        # Centralizar na janela pai
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - 440) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - 220) // 2
+        self.geometry(f"+{x}+{y}")
+
+        # Ícone
+        ctk.CTkLabel(
+            self, text="📂", font=ctk.CTkFont(size=32)
+        ).pack(pady=(20, 5))
+
+        # Mensagem
+        ctk.CTkLabel(
+            self,
+            text=message,
+            font=ctk.CTkFont(size=13),
+            text_color=get_color("text"),
+            wraplength=390,
+            justify="center",
+        ).pack(padx=20, pady=(0, 15))
+
+        # Botões
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancelar",
+            fg_color=get_color("border"),
+            text_color=get_color("text"),
+            hover_color=get_color("border_hover"),
+            width=140,
+            command=self.destroy,
+        ).pack(side="left", expand=True, padx=5)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="▶ Continuar",
+            fg_color=get_color("purple"),
+            hover_color=get_color("purple_hover"),
+            width=140,
+            command=self._confirm,
+        ).pack(side="right", expand=True, padx=5)
+
+    def _confirm(self):
+        self.destroy()
+        if self.on_confirm:
+            self.on_confirm()
+
+
 class SettingsView(ctk.CTkScrollableFrame):
     """View de configurações."""
 
@@ -209,7 +271,7 @@ class SettingsView(ctk.CTkScrollableFrame):
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            backup_btn_frame, text="📂 Restaurar de Arquivo",
+            backup_btn_frame, text="📂 Restaurar o Arquivo",
             font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=get_color("purple"), hover_color=get_color("purple_hover"),
             height=38, corner_radius=10, width=200,
@@ -228,10 +290,113 @@ class SettingsView(ctk.CTkScrollableFrame):
             command=self._open_backup_folder,
         ).pack(side="left")
 
+        # === Google Drive - Backup na Nuvem ===
+        drive_card = ctk.CTkFrame(self, fg_color=COLORS["card"], corner_radius=12,
+                                   border_width=1, border_color=COLORS["border"])
+        drive_card.pack(fill="x", pady=(0, 15))
+
+        ctk.CTkLabel(
+            drive_card, text="☁️ Google Drive — Backup na Nuvem",
+            font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["text"],
+        ).pack(padx=15, pady=(15, 3), anchor="w")
+
+        ctk.CTkLabel(
+            drive_card,
+            text="Cole o link da pasta do Google Drive onde o backup será enviado.\n"
+                 "A pasta deve ter permissão de Editor para a conta autenticada.",
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["text_secondary"],
+            justify="left",
+        ).pack(padx=15, pady=(0, 10), anchor="w")
+
+        ctk.CTkFrame(drive_card, height=1, fg_color=COLORS["border"]).pack(
+            fill="x", padx=15, pady=(0, 10)
+        )
+
+        ctk.CTkLabel(
+            drive_card,
+            text="Link da Pasta do Drive:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLORS["text"],
+        ).pack(padx=15, anchor="w")
+
+        drive_row = ctk.CTkFrame(drive_card, fg_color="transparent")
+        drive_row.pack(fill="x", padx=15, pady=(4, 0))
+        drive_row.grid_columnconfigure(0, weight=1)
+
+        current_drive_link = settings.get("drive_folder_link", "") or ""
+        self.drive_link_entry = ctk.CTkEntry(
+            drive_row,
+            height=38,
+            font=ctk.CTkFont(size=12),
+            placeholder_text="https://drive.google.com/drive/folders/SEU_FOLDER_ID",
+        )
+        if current_drive_link:
+            self.drive_link_entry.insert(0, current_drive_link)
+        self.drive_link_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+        ctk.CTkButton(
+            drive_row,
+            text="💾 Salvar",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=get_color("primary"),
+            hover_color=get_color("primary_hover"),
+            height=38, width=90, corner_radius=8,
+            command=self._save_drive_link,
+        ).grid(row=0, column=1)
+
+        # Status do token / pasta configurada
+        from services.google_drive import extract_folder_id_from_link
+        folder_id_val = extract_folder_id_from_link(current_drive_link)
+        if folder_id_val:
+            drive_status_text = f"✅ Pasta configurada  •  ID: {folder_id_val}"
+            drive_status_color = get_color("success")
+        else:
+            drive_status_text = "⚠️ Nenhuma pasta configurada. Cole o link acima para ativar."
+            drive_status_color = get_color("text_secondary")
+
+        self.drive_status_label = ctk.CTkLabel(
+            drive_card,
+            text=drive_status_text,
+            font=ctk.CTkFont(size=11),
+            text_color=drive_status_color,
+            justify="left",
+        )
+        self.drive_status_label.pack(padx=15, pady=(6, 8), anchor="w")
+
+        # Dica de como obter o link
+        hint_frame = ctk.CTkFrame(drive_card, fg_color=COLORS["bg"], corner_radius=8)
+        hint_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        ctk.CTkLabel(
+            hint_frame,
+            text="Como obter o link:  No Google Drive, botão direito na pasta  "
+                 "→  Compartilhar  →  Alterar para qualquer pessoa com o link (Editor)  "
+                 "→  Copiar link.",
+            font=ctk.CTkFont(size=11),
+            text_color=COLORS["text_secondary"],
+            justify="left",
+            wraplength=600,
+        ).pack(padx=10, pady=8, anchor="w")
+
+        # Botão de teste de conexão
+        drive_test_frame = ctk.CTkFrame(drive_card, fg_color="transparent")
+        drive_test_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+        ctk.CTkButton(
+            drive_test_frame,
+            text="🔗 Testar Conexão com o Drive",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=get_color("gray"), hover_color=get_color("gray_hover"),
+            height=35, corner_radius=8, width=230,
+            command=self._test_drive_connection,
+        ).pack(side="left")
+
         # === Aparência ===
         theme_card = ctk.CTkFrame(self, fg_color=COLORS["card"], corner_radius=12,
                                    border_width=1, border_color=COLORS["border"])
         theme_card.pack(fill="x", pady=(0, 15))
+
 
         ctk.CTkLabel(
             theme_card, text="🎨 Aparência",
@@ -355,23 +520,20 @@ class SettingsView(ctk.CTkScrollableFrame):
                 pass
 
     def _manual_backup(self):
-        """Faz backup manual e faz upload para Google Drive."""
+        """Faz backup manual, salva localmente e tenta upload para Google Drive."""
         try:
-            # 1. Salvar backup localmente
+            # 1. Salvar backup localmente (já tenta upload internamente)
             filepath = save_backup()
             self.backup_status_label.configure(
                 text=f"✅ Arquivo: {filepath}",
                 text_color=COLORS["success"],
             )
-            self.app.show_toast("Backup salvo localmente!", "success")
-            
-            # 2. Tentar fazer upload para Google Drive
+            # 2. Tentar upload explícito para feedback ao usuário
             upload_success = upload_backup_to_drive_manual()
             if upload_success:
-                self.app.show_toast("✅ Backup enviado para o Google Drive!", "success")
+                self.app.show_toast("✅ Backup salvo localmente e enviado ao Google Drive!", "success")
             else:
-                # Backup local foi salvo, mas Drive não estava disponível
-                self.app.show_toast("⚠️ Backup local salvo, mas Drive não está configurado ou acessível.", "warning")
+                self.app.show_toast("Backup local salvo. Google Drive não acessível ou não configurado.", "warning")
         except Exception as e:
             self.app.show_toast(f"Erro no backup: {e}", "error")
 
@@ -412,9 +574,8 @@ class SettingsView(ctk.CTkScrollableFrame):
         )
         if not filepath:
             return
-        ConfirmDialog(
+        _RestoreFileDialog(
             self.app,
-            "Restaurar de Arquivo",
             f"Isso substituirá TODOS os dados atuais pelos dados do arquivo:\n\n"
             f"{filepath}\n\nDeseja continuar?",
             lambda: self._do_restore_file(filepath),
@@ -443,7 +604,80 @@ class SettingsView(ctk.CTkScrollableFrame):
         except Exception as e:
             self.app.show_toast(f"Erro ao abrir pasta: {e}", "error")
 
+    def _save_drive_link(self):
+        """Salva o link da pasta do Google Drive no banco de dados."""
+        from services.google_drive import extract_folder_id_from_link
+        link = self.drive_link_entry.get().strip()
+
+        if not link:
+            # Limpar configuração
+            db.update_settings(drive_folder_link="")
+            self.drive_status_label.configure(
+                text="⚠️ Nenhuma pasta configurada. Cole o link acima para ativar.",
+                text_color=get_color("text_secondary"),
+            )
+            self.app.show_toast("Configuração do Drive removida.", "info")
+            return
+
+        folder_id = extract_folder_id_from_link(link)
+        if not folder_id:
+            self.app.show_toast(
+                "Link inválido. Use o link de uma pasta do Google Drive.", "error"
+            )
+            return
+
+        # Salvar no banco
+        db.update_settings(drive_folder_link=link)
+
+        # Atualizar status visual
+        self.drive_status_label.configure(
+            text=f"✅ Pasta configurada  •  ID: {folder_id}",
+            text_color=get_color("success"),
+        )
+        self.app.show_toast(
+            f"Link do Drive salvo! ID da pasta: {folder_id[:20]}...", "success"
+        )
+
+    def _test_drive_connection(self):
+        """Testa a conexão com a pasta do Google Drive configurada."""
+        from services.google_drive import (
+            test_drive_connection, get_configured_folder_id, HAS_GOOGLE_LIBS
+        )
+
+        if not HAS_GOOGLE_LIBS:
+            self.app.show_toast(
+                "Bibliotecas do Google não instaladas. Execute: pip install -r requirements.txt",
+                "error"
+            )
+            return
+
+        folder_id = get_configured_folder_id()
+        if not folder_id:
+            self.app.show_toast(
+                "Configure o link da pasta do Drive antes de testar.", "warning"
+            )
+            return
+
+        self.app.show_toast("Testando conexão com o Drive...", "info")
+
+        def do_test():
+            result = test_drive_connection(folder_id)
+            if result:
+                self.app.show_toast(
+                    "✅ Conexão com o Google Drive estabelecida com sucesso!", "success"
+                )
+            else:
+                self.app.show_toast(
+                    "❌ Falha na conexão. Verifique as credenciais e as permissões da pasta.",
+                    "error"
+                )
+
+        # Executar em thread para não travar a UI
+        import threading
+        threading.Thread(target=do_test, daemon=True).start()
+
     def _confirm_clear_data(self):
+
         ConfirmDialog(
             self.app,
             "Limpar Dados",
