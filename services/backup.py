@@ -127,7 +127,7 @@ def export_all_data() -> Dict[str, Any]:
 
 def save_backup() -> str:
     """
-    Salva o backup automático no diretório configurado e faz upload para o Google Drive.
+    Salva o backup automático no diretório configurado (LOCAL APENAS).
     Retorna o caminho do arquivo salvo.
     """
     backup_dir = get_backup_dir()
@@ -156,13 +156,6 @@ def save_backup() -> str:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    # Fazer upload para o Google Drive silenciosamente
-    try:
-        from services.google_drive import upload_backup_to_drive
-        upload_backup_to_drive(filepath)
-    except Exception:
-        pass  # Upload silencioso - não interromper se Drive não disponível
-
     return filepath
 
 
@@ -176,20 +169,6 @@ def trigger_backup():
     except Exception:
         pass  # Backup silencioso - não interromper operação principal
 
-
-def upload_backup_to_drive_manual() -> bool:
-    """
-    Faz upload MANUAL do backup para o Google Drive.
-    Retorna True se sucesso, False caso contrário.
-    """
-    try:
-        from services.google_drive import upload_backup_to_drive
-        filepath = get_backup_filepath()
-        if not os.path.exists(filepath):
-            return False
-        return upload_backup_to_drive(filepath)
-    except Exception:
-        return False
 
 
 def load_backup(filepath: Optional[str] = None) -> Optional[Dict[str, Any]]:

@@ -1023,7 +1023,8 @@ def update_settings(**kwargs) -> bool:
     
     allowed_fields = ['company_name', 'company_phone', 'company_email',
                       'company_address', 'company_cnpj', 'company_logo',
-                      'dobra_value', 'backup_path', 'drive_folder_link']
+                      'dobra_value', 'backup_path']
+
     
     fields = []
     values = []
