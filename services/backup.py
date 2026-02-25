@@ -71,7 +71,7 @@ def export_all_data() -> Dict[str, Any]:
     data = {
         "meta": {
             "app": "CalhaGest",
-            "version": "2.0.0",
+            "version": "2.1.0",
             "exported_at": datetime.now().isoformat(),
         },
         "settings": {},
@@ -82,6 +82,11 @@ def export_all_data() -> Dict[str, Any]:
         "quote_items": [],
         "inventory": [],
         "installations": [],
+        "payments": [],
+        "expenses": [],
+        "expense_categories": [],
+        "employees": [],
+        "payroll": [],
     }
 
     # Settings
@@ -120,6 +125,26 @@ def export_all_data() -> Dict[str, Any]:
     # Installations
     cursor.execute("SELECT * FROM installations ORDER BY id")
     data["installations"] = [dict(r) for r in cursor.fetchall()]
+
+    # Payments
+    cursor.execute("SELECT * FROM payments ORDER BY id")
+    data["payments"] = [dict(r) for r in cursor.fetchall()]
+
+    # Expenses
+    cursor.execute("SELECT * FROM expenses ORDER BY id")
+    data["expenses"] = [dict(r) for r in cursor.fetchall()]
+
+    # Expense categories
+    cursor.execute("SELECT * FROM expense_categories ORDER BY id")
+    data["expense_categories"] = [dict(r) for r in cursor.fetchall()]
+
+    # Employees
+    cursor.execute("SELECT * FROM employees ORDER BY id")
+    data["employees"] = [dict(r) for r in cursor.fetchall()]
+
+    # Payroll
+    cursor.execute("SELECT * FROM payroll ORDER BY id")
+    data["payroll"] = [dict(r) for r in cursor.fetchall()]
 
     conn.close()
     return data
@@ -228,11 +253,16 @@ def restore_from_backup(filepath: Optional[str] = None) -> Dict[str, Any]:
         # 2. Limpar tabelas dependentes na ordem correta
         cursor.execute("DELETE FROM product_materials")
         cursor.execute("DELETE FROM quote_items")
+        cursor.execute("DELETE FROM payments")
         cursor.execute("DELETE FROM installations")
         cursor.execute("DELETE FROM quotes")
         cursor.execute("DELETE FROM products")
         cursor.execute("DELETE FROM inventory")
         cursor.execute("DELETE FROM product_types")
+        cursor.execute("DELETE FROM payroll")
+        cursor.execute("DELETE FROM employees")
+        cursor.execute("DELETE FROM expenses")
+        cursor.execute("DELETE FROM expense_categories")
 
         # 3. Restaurar product_types
         for pt in data.get("product_types", []):
@@ -246,12 +276,15 @@ def restore_from_backup(filepath: Optional[str] = None) -> Dict[str, Any]:
         for p in data.get("products", []):
             cursor.execute(
                 """INSERT INTO products (id, name, type, measure, price_per_meter,
-                   cost, has_dobra, description, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   cost, has_dobra, description, width, length,
+                   is_installed, pricing_unit, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     p["id"], p["name"], p["type"], p["measure"],
                     p["price_per_meter"], p.get("cost", 0),
                     p.get("has_dobra", 0), p.get("description", ""),
+                    p.get("width", 0), p.get("length", 0),
+                    p.get("is_installed", 1), p.get("pricing_unit", "metro"),
                     p.get("created_at"), p.get("updated_at"),
                 ),
             )
@@ -290,15 +323,19 @@ def restore_from_backup(filepath: Optional[str] = None) -> Dict[str, Any]:
                 """INSERT INTO quotes (id, client_name, client_phone, client_address,
                    total, cost_total, profit, profitability, status,
                    technical_notes, contract_terms, payment_methods,
+                   quote_type, discount_total, discount_type,
                    scheduled_date, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     q["id"], q["client_name"], q.get("client_phone", ""),
                     q.get("client_address", ""), q.get("total", 0),
                     q.get("cost_total", 0), q.get("profit", 0),
                     q.get("profitability", 0), q.get("status", "draft"),
                     q.get("technical_notes", ""), q.get("contract_terms", ""),
-                    q.get("payment_methods", ""), q.get("scheduled_date"),
+                    q.get("payment_methods", ""),
+                    q.get("quote_type", "instalado"),
+                    q.get("discount_total", 0), q.get("discount_type", "percentage"),
+                    q.get("scheduled_date"),
                     q.get("created_at"), q.get("updated_at"),
                 ),
             )
@@ -309,13 +346,17 @@ def restore_from_backup(filepath: Optional[str] = None) -> Dict[str, Any]:
             cursor.execute(
                 """INSERT INTO quote_items (id, quote_id, product_id, product_name,
                    measure, meters, price_per_meter, total,
-                   cost_per_meter, cost_total)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   cost_per_meter, cost_total, discount,
+                   width, length, pricing_unit)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     qi["id"], qi["quote_id"], qi.get("product_id"),
                     qi["product_name"], qi["measure"], qi["meters"],
                     qi["price_per_meter"], qi["total"],
                     qi.get("cost_per_meter", 0), qi.get("cost_total", 0),
+                    qi.get("discount", 0),
+                    qi.get("width", 0), qi.get("length", 0),
+                    qi.get("pricing_unit", "metro"),
                 ),
             )
         summary["quote_items"] = len(data.get("quote_items", []))
@@ -334,6 +375,76 @@ def restore_from_backup(filepath: Optional[str] = None) -> Dict[str, Any]:
                 ),
             )
         summary["installations"] = len(data.get("installations", []))
+
+        # 10. Restaurar payments
+        for pay in data.get("payments", []):
+            cursor.execute(
+                """INSERT INTO payments (id, quote_id, amount, payment_method,
+                   notes, payment_date, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    pay["id"], pay["quote_id"], pay["amount"],
+                    pay["payment_method"], pay.get("notes", ""),
+                    pay.get("payment_date"), pay.get("created_at"),
+                ),
+            )
+        summary["payments"] = len(data.get("payments", []))
+
+        # 11. Restaurar expense_categories
+        for ec in data.get("expense_categories", []):
+            cursor.execute(
+                """INSERT INTO expense_categories (id, key, label, color, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    ec["id"], ec["key"], ec["label"],
+                    ec.get("color", "#6b7280"), ec.get("created_at"),
+                ),
+            )
+        summary["expense_categories"] = len(data.get("expense_categories", []))
+
+        # 12. Restaurar expenses
+        for exp in data.get("expenses", []):
+            cursor.execute(
+                """INSERT INTO expenses (id, description, category, amount,
+                   expense_date, notes, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    exp["id"], exp["description"],
+                    exp.get("category", "geral"), exp["amount"],
+                    exp.get("expense_date"), exp.get("notes", ""),
+                    exp.get("created_at"), exp.get("updated_at"),
+                ),
+            )
+        summary["expenses"] = len(data.get("expenses", []))
+
+        # 13. Restaurar employees
+        for emp in data.get("employees", []):
+            cursor.execute(
+                """INSERT INTO employees (id, name, role, phone, salary,
+                   active, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    emp["id"], emp["name"], emp.get("role", ""),
+                    emp.get("phone", ""), emp.get("salary", 0),
+                    emp.get("active", 1),
+                    emp.get("created_at"), emp.get("updated_at"),
+                ),
+            )
+        summary["employees"] = len(data.get("employees", []))
+
+        # 14. Restaurar payroll
+        for pr in data.get("payroll", []):
+            cursor.execute(
+                """INSERT INTO payroll (id, employee_id, amount, reference_month,
+                   payment_date, notes, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    pr["id"], pr["employee_id"], pr["amount"],
+                    pr["reference_month"], pr.get("payment_date"),
+                    pr.get("notes", ""), pr.get("created_at"),
+                ),
+            )
+        summary["payroll"] = len(data.get("payroll", []))
 
         conn.commit()
     except Exception:
