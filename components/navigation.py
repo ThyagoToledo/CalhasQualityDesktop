@@ -119,3 +119,7 @@ class Sidebar(ctk.CTkFrame):
                 btn.configure(fg_color=get_color("sidebar_active"), text_color=get_color("text"))
             else:
                 btn.configure(fg_color="transparent", text_color=get_color("sidebar_text"))
+
+    def update_company_name(self, company_name: str):
+        """Atualiza o nome da empresa na sidebar."""
+        self.company_label.configure(text=company_name)
