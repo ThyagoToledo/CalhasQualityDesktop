@@ -638,8 +638,8 @@ class ProductsView(ctk.CTkFrame):
              "option_labels": {"0": "Sem Dobra", "1": "Com Dobra"}},
             {"key": "is_installed", "label": "Instalado?", "type": "option", "options": ["1", "0"],
              "option_labels": {"1": "Sim - Produto Instalado", "0": "Não - Produto Não Instalado"}},
-            {"key": "pricing_unit", "label": "Cobrança por", "type": "option", "options": ["metro", "unidade"],
-             "option_labels": {"metro": "Metro (R$/m)", "unidade": "Unidade (R$/un)"}},
+            {"key": "pricing_unit", "label": "Cobrança por", "type": "option", "options": ["metro", "m²", "unidade"],
+             "option_labels": {"metro": "Metro (R$/m)", "m²": "Metro Quadrado (R$/m²)", "unidade": "Unidade (R$/un)"}},
             {"key": "description", "label": "Descrição", "type": "text"},
         ]
 
