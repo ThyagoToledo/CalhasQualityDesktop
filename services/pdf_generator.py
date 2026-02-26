@@ -141,7 +141,7 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
         pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(*TEXT_DARK)
         pdf.set_xy(margin, y_pos)
-        pdf.cell(content_width, 5, cnpj, align='C', new_x='LMARGIN', new_y='NEXT')
+        pdf.cell(content_width, 5, f"CNPJ/CPF: {cnpj}", align='C', new_x='LMARGIN', new_y='NEXT')
         y_pos += 5
 
     address = settings.get('company_address', '')
