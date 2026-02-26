@@ -236,7 +236,12 @@ class ProductsView(ctk.CTkFrame):
 
         # Badge de unidade de preço
         pricing_unit = product.get('pricing_unit', 'metro')
-        pu_text = "📏 Metro" if pricing_unit == 'metro' else "📦 Unidade"
+        if pricing_unit == 'metro':
+            pu_text = "📏 Metro"
+        elif pricing_unit == 'm²':
+            pu_text = "📐 Metro quadrado"
+        else:
+            pu_text = "📦 Unidade"
         ctk.CTkLabel(
             name_frame, text=f"  {pu_text}  ",
             font=ctk.CTkFont(size=10, weight="bold"),
@@ -246,7 +251,12 @@ class ProductsView(ctk.CTkFrame):
 
         dims = format_dimensions(product.get('width', 0), product.get('length', 0))
         pricing_unit = product.get('pricing_unit', 'metro')
-        unit_label = '/m' if pricing_unit == 'metro' else '/un'
+        if pricing_unit == 'metro':
+            unit_label = '/m'
+        elif pricing_unit == 'm²':
+            unit_label = '/m²'
+        else:
+            unit_label = '/un'
         details = f"Dimensões: {dims}  •  Preço: {format_currency(product['price_per_meter'])}{unit_label}"
         if product.get("cost") and product["cost"] > 0:
             details += f"  •  Custo: {format_currency(product['cost'])}{unit_label}"
@@ -544,7 +554,7 @@ class ProductsView(ctk.CTkFrame):
         materials_list_frame = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
         materials_list_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
-        unit_labels = {"metro": "por metro", "cm": "por cm", "unidade": "por unidade"}
+        unit_labels = {"metro": "por metro", "m²": "por metro quadrado", "cm": "por cm", "unidade": "por unidade"}
 
         def refresh_materials_list():
             for w in materials_list_frame.winfo_children():

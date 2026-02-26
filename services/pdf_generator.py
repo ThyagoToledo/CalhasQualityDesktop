@@ -295,7 +295,12 @@ def generate_quote_pdf(quote: dict[str, Any], company_settings: Optional[dict[st
             item_width = item.get('width', 0)
             item_length = item.get('length', 0)
             item_pricing_unit = item.get('pricing_unit', 'metro') or 'metro'
-            unit_suffix = 'Un' if item_pricing_unit == 'unidade' else 'm'
+            if item_pricing_unit == 'unidade':
+                unit_suffix = 'Un'
+            elif item_pricing_unit == 'm²':
+                unit_suffix = 'm²'
+            else:
+                unit_suffix = 'm'
 
             row_y = y_pos
 

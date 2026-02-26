@@ -935,7 +935,12 @@ class QuotesView(ctk.CTkFrame):
                 ).pack(side="left")
 
                 item_pu = item.get('pricing_unit', 'metro')
-                item_unit = 'm' if item_pu == 'metro' else 'un'
+                if item_pu == 'metro':
+                    item_unit = 'm'
+                elif item_pu == 'm²':
+                    item_unit = 'm²'
+                else:
+                    item_unit = 'un'
                 price_display = format_currency(item['price_per_meter'])
                 if item.get("discount", 0) > 0:
                     price_display = f"{format_currency(item['price_per_meter'])} (desc -{format_currency(item['discount'])}/{item_unit})"
@@ -977,7 +982,12 @@ class QuotesView(ctk.CTkFrame):
         for p in products:
             dims = format_dimensions(p.get('width', 0), p.get('length', 0))
             pricing_unit = p.get('pricing_unit', 'metro')
-            unit_label = '/m' if pricing_unit == 'metro' else '/un'
+            if pricing_unit == 'metro':
+                unit_label = '/m'
+            elif pricing_unit == 'm²':
+                unit_label = '/m²'
+            else:
+                unit_label = '/un'
             label = f"{p['name']} ({p['type']}, {dims}) - {format_currency(p['price_per_meter'])}{unit_label}"
             if p.get('has_dobra'):
                 label += f" [+Dobra {format_currency(dobra_value)}/m]"
@@ -1127,7 +1137,12 @@ class QuotesView(ctk.CTkFrame):
                 pricing_unit = product.get('pricing_unit', 'metro')
                 qty = parse_decimal(meters_entry.get() or "0")
                 if qty <= 0:
-                    unit_name = "metros" if pricing_unit == 'metro' else "quantidade"
+                    if pricing_unit == 'metro':
+                        unit_name = "metros"
+                    elif pricing_unit == 'm²':
+                        unit_name = "metros quadrados"
+                    else:
+                        unit_name = "quantidade"
                     self.app.show_toast(f"{unit_name.capitalize()} deve ser maior que zero.", "warning")
                     return
             except ValueError:
@@ -1173,7 +1188,12 @@ class QuotesView(ctk.CTkFrame):
             total = qty * final_price
             
             is_dobrado = dobrado_var.get() if quote_type == "nao_instalado" else product.get("has_dobra", False)
-            unit_label = "m" if pricing_unit == 'metro' else "un"
+            if pricing_unit == 'metro':
+                unit_label = "m"
+            elif pricing_unit == 'm²':
+                unit_label = "m²"
+            else:
+                unit_label = "un"
             display_name = product["name"] + (" (c/ dobra)" if (product.get("has_dobra") or is_dobrado) else "")
             
             items_list.append({
@@ -1279,7 +1299,7 @@ class QuotesView(ctk.CTkFrame):
             ctk.CTkLabel(opt_frame, text="Cobrança por", font=ctk.CTkFont(size=12, weight="bold"),
                          text_color=COLORS["text"]).grid(row=0, column=1, sticky="w", padx=(5, 0))
             np_pricing_var = ctk.StringVar(value="metro")
-            ctk.CTkOptionMenu(opt_frame, values=["metro", "unidade"], variable=np_pricing_var,
+            ctk.CTkOptionMenu(opt_frame, values=["metro", "m²", "unidade"], variable=np_pricing_var,
                               font=ctk.CTkFont(size=12), height=35).grid(row=1, column=1, sticky="ew", padx=(5, 0))
             
             # Descrição
